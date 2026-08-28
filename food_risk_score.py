@@ -67,8 +67,8 @@
 # %%
 import pandas as pd
 
-# Point this at the folder holding the CSVs (in Colab: "/content").
-DATA_DIR = "."
+# Point this at the folder holding the CSVs (in Colab: "/content/faostat").
+DATA_DIR = "faostat"
 
 DATASETS = {
     "production":          f"{DATA_DIR}/Afganistan_Production_Wheat.csv",
@@ -103,7 +103,9 @@ CV_MIN_YEARS = 5
 # HHI stops being trustworthy.
 COVERAGE_BAND = (0.60, 1.40)
 
-OUT_PATH = f"{DATA_DIR}/food_risk_score.csv"
+# The score is this project's own output, not FAOSTAT input, so it is written
+# beside the script rather than into DATA_DIR.
+OUT_PATH = "food_risk_score.csv"
 
 
 def load(path):

@@ -13,8 +13,8 @@
 # %%
 import pandas as pd
 
-# Point this at the folder holding the five CSVs (in Colab: "/content").
-DATA_DIR = "."
+# Point this at the folder holding the five CSVs (in Colab: "/content/faostat").
+DATA_DIR = "faostat"
 
 # The two trade matrices are the same flows seen from opposite ends:
 #   _self   Afghanistan reports its imports; suppliers sit in `Partner Countries`
