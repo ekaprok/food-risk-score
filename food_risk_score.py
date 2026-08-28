@@ -88,7 +88,7 @@ KCAL_TOTAL = "Grand Total"
 # which is which. Nothing in the file resolves it; only knowing the series does.
 # So each one declares its own reading:
 DROP_YEAR, FILL_ZERO = "drop_year", "fill_zero"
-SERIES = {
+MISSING_YEAR_POLICY = {
     "production": ("production", "Production",      DROP_YEAR),
     "imports":    ("trade",      "Import quantity", DROP_YEAR),
     "exports":    ("trade",      "Export quantity", FILL_ZERO),
@@ -148,17 +148,19 @@ def quantity_by_year(df, element, item=None):
 
 # Building the frame from a dict aligns every series on its year index, so
 # 2017 production lands in the same row as 2017 imports. A year one series
-# lacks becomes NaN here, and SERIES decides what happens to it next.
+# lacks becomes NaN here, and MISSING_YEAR_POLICY decides what happens to
+# it next.
 balance = pd.DataFrame({
     name: quantity_by_year(data[dataset], element)
-    for name, (dataset, element, _) in SERIES.items()
+    for name, (dataset, element, _) in MISSING_YEAR_POLICY.items()
 })
 
-for name, (_, _, policy) in SERIES.items():
+for name, (_, _, policy) in MISSING_YEAR_POLICY.items():
     if policy == FILL_ZERO:
         balance[name] = balance[name].fillna(0.0)
 
-required = [name for name, (_, _, policy) in SERIES.items() if policy == DROP_YEAR]
+required = [name for name, (_, _, policy) in MISSING_YEAR_POLICY.items()
+            if policy == DROP_YEAR]
 missing = balance[balance[required].isna().any(axis=1)]
 if len(missing):
     WARNINGS.append(
