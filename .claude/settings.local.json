@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(pip3 install *)",
-      "Bash(python3 read_wheat_data.py)",
-      "Bash(python3 -m unittest test_load_and_audit -v)"
-    ]
-  }
-}
