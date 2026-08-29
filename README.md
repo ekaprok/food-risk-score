@@ -12,8 +12,30 @@ python3 load_and_audit.py
 
 Read-only audit of the five FAOSTAT CSVs.
 
-## `food_risk_score.py`
+## `internal_risk_score.py`
 
 ```bash
-python3 food_risk_score.py
+python3 internal_risk_score.py
+```
+
+Per-year internal supply metrics from production and trade totals: apparent
+domestic supply, self-sufficiency ratio (SSR), import dependency ratio (IDR)
+and the internal risk (rolling coefficient of variation of production).
+Writes `internal_risk_score.csv`.
+
+## `external_risk_score.py`
+
+```bash
+python3 external_risk_score.py
+```
+
+Per-year external risk: the Herfindahl-Hirschman index over import suppliers,
+with one trade-matrix source (self-reported or mirror) selected per year by
+how well its total reconciles with the country import total. Writes
+`external_risk_score.csv`.
+
+## Tests
+
+```bash
+python3 -m unittest test_internal_risk_score test_external_risk_score test_load_and_audit
 ```
