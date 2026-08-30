@@ -1,8 +1,27 @@
 # Food Security Risk Score
 
-Requires Python 3.9+ and pandas. The FAOSTAT source CSVs live in `faostat/`;
-each script reads them from `DATA_DIR`, set to `"faostat"` at the top of the
-file, so run the scripts from the project root.
+## Setup
+
+You need Python 3.9 or newer and pandas.
+
+**1. Check whether you already have Python.** In a terminal (Terminal on macOS,
+PowerShell on Windows), run:
+
+```bash
+python3 --version
+```
+
+If that prints `Python 3.9.x` or higher, skip to step 3. On Windows, try
+`python --version` if `python3` isn't recognised.
+
+**2. Install Python.** Download the installer for your system from
+<https://www.python.org/downloads/> and run it.
+
+**3. Install pandas.**
+
+```bash
+python3 -m pip install pandas
+```
 
 ## `load_and_audit.py`
 
@@ -18,31 +37,21 @@ Read-only audit of the five FAOSTAT CSVs.
 python3 internal_risk_score.py
 ```
 
-Per-year internal supply metrics from production and trade totals, for
-2019-2024: apparent domestic supply, self-sufficiency ratio (SSR), import
-dependency ratio (IDR) and the internal risk (coefficient of variation of
-production over a trailing 5-year window).
+Calculates SSR, IDR and internal risk. The following parameters can be configured:
 
-Every pair of the `COUNTRIES` and `COMMODITIES` constants is scored -- currently
-Afghanistan and Thailand against wheat and rice. Writes
-`internal_risk_score.csv`, with `country` and `commodity` columns, sorted by
-country, then commodity, then year.
-
-Production must be present for every year from 2015, since the first risk
-window reaches four years back; a gap there raises. An absent trade row is read
-as zero, which is how FAOSTAT records a year with nothing crossing the border,
-and every such fill is printed.
-
-## `external_risk_score.py`
-
-```bash
-python3 external_risk_score.py
-```
-
-Per-year external risk: the Herfindahl-Hirschman index over import suppliers,
-with one trade-matrix source (self-reported or mirror) selected per year by
-how well its total reconciles with the country import total. Writes
-`external_risk_score.csv`.
+- `DATA_DIR`: path to the FAOSTAT CSVs (default: `"faostat"`)
+- `OUT_PATH`: where the output CSV is written (default:
+  `"internal_risk_score.csv"`)
+- `COUNTRIES`: the countries to score.
+- `COMMODITIES`: the commodities to score (default: rice and wheat). Each entry
+  maps a display name to the spelling used in each source: `cpc` (`wheat`) for the
+  production and trade datasets, `fbs` (`wheat and products`) for the food balance dataset.
+- `YEARS`: the first and last year to score, inclusive (default: 2020-2024).
+- `RISK_WINDOW`: how many years the internal risk (coefficient of variation of
+  production) looks back over, including the current year (default: 5).
+- `MISSING_YEAR_POLICY`: how to read a year absent from a source series, one
+  setting per series. `None` raises an error, `FILL_ZERO` reads it as zero, and
+  `CARRY_FORWARD` repeats the previous year.
 
 ## Tests
 

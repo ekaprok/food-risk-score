@@ -172,6 +172,22 @@ class TestValidateAndGetSeries(unittest.TestCase):
         self.assertEqual(list(result.index), [2019, 2020, 2021])
         self.assertEqual(list(result.values), [5.0, 0.0, 0.0])
 
+    def test_carry_forward_repeats_the_last_year_on_file(self):
+        df = trade_rows([("Production", "2019", "5"), ("Production", "2020", "7")])
+        result, printed = capture(irs.validate_and_get_series, df, "calories",
+                                  "Production", (2019, 2022), irs.CARRY_FORWARD)
+        self.assertEqual(list(result.index), [2019, 2020, 2021, 2022])
+        self.assertEqual(list(result.values), [5.0, 7.0, 7.0, 7.0])
+        self.assertIn("2021, 2022", printed)
+
+    def test_carry_forward_with_nothing_yet_to_carry_raises(self):
+        # 2019 comes before every row on file, so no reading carries into it.
+        df = trade_rows([("Production", "2020", "5")])
+        with self.assertRaisesRegex(ValueError, r"unreadable value\(s\) for year\(s\) \[2019\]"):
+            with contextlib.redirect_stdout(io.StringIO()):
+                irs.validate_and_get_series(df, "calories", "Production",
+                                            (2019, 2020), irs.CARRY_FORWARD)
+
     def test_missing_columns_raise(self):
         df = pd.DataFrame({"Year": ["2020"], "Value": ["100"]})
         with self.assertRaises(ValueError):
@@ -248,6 +264,53 @@ class TestInternalRisk(YearsCase):
         self.assertAlmostEqual(risk.at[2023], std_2023 / mean_2023)
         self.assertEqual(risk.at[2024], std_2024 / mean_2024)
         self.assertEqual(risk.name, "risk_internal")
+
+
+KCAL = "Food supply (kcal/capita/day)"
+
+
+class TestCommodityCriticality(YearsCase):
+    """The commodity's share of the national calorie supply, per year."""
+
+    # Small enough to check by hand: two scored years, both on file.
+    YEARS = (2020, 2021)
+
+    FILE = pair_rows([
+        ("Afghanistan", "Grand Total",        KCAL, "2020", "2000"),
+        ("Afghanistan", "Grand Total",        KCAL, "2021", "2500"),
+        ("Afghanistan", "Wheat and products", KCAL, "2020", "1000"),
+        ("Afghanistan", "Wheat and products", KCAL, "2021", "500"),
+    ])
+
+    def test_commodity_criticality(self):
+        score = self.quietly(irs.commodity_criticality, self.FILE,
+                             "Afghanistan", "Wheat")
+
+        self.assertEqual(list(score.index), [2020, 2021])
+        self.assertAlmostEqual(score.at[2020], 1000 / 2000)
+        self.assertAlmostEqual(score.at[2021], 500 / 2500)
+        self.assertEqual(score.name, "criticality")
+
+    def test_commodity_criticality_carry_forward(self):
+        self.set_years((2020, 2022))
+
+        score, printed = capture(irs.commodity_criticality, self.FILE,
+                                 "Afghanistan", "Wheat")
+
+        self.assertEqual(list(score.index), [2020, 2021, 2022])
+        self.assertAlmostEqual(score.at[2022], 500 / 2500)
+        self.assertIn("2022", printed)
+
+    def test_a_non_positive_total_raises(self):
+        file = pair_rows([
+            ("Afghanistan", "Grand Total",        KCAL, "2020", "2000"),
+            ("Afghanistan", "Grand Total",        KCAL, "2021", "0"),
+            ("Afghanistan", "Wheat and products", KCAL, "2020", "1000"),
+            ("Afghanistan", "Wheat and products", KCAL, "2021", "500"),
+        ])
+
+        with self.assertRaisesRegex(ValueError, r"non-positive total supply in \[2021\]"):
+            irs.commodity_criticality(file, "Afghanistan", "Wheat")
 
 
 if __name__ == "__main__":

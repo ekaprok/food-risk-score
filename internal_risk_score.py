@@ -8,14 +8,20 @@ Builds the internal supply metrics from the FAOSTAT CSVs`:
     Risk_internal = std(P) / mean(P)  coefficient of variation of production
                                       over the trailing RISK_WINDOW years,
                                       one figure per year
+    C_kcal        = Kcal_commodity / Kcal_total
+                                      commodity criticality, per year: how
+                                      essential the commodity is to the
+                                      national diet, as its share of the
+                                      calorie supply
 
 Which dataset feeds which term:
 
-    | term          | source file             | element                |
-    |---------------|-------------------------|------------------------|
-    | P             | `Production_Wheat`      | Production             |
-    | I, E          | `ImportAndExport_Wheat` | Import/Export quantity |
-    | Risk_internal | `Production_Wheat`      | Production             |
+    | term          | source file              | element                 |
+    |---------------|--------------------------|-------------------------|
+    | P             | `Production_WheatRice`   | Production              |
+    | I, E          | `ImportAndExport_...`    | Import/Export quantity  |
+    | Risk_internal | `Production_WheatRice`   | Production              |
+    | C_kcal        | `Calories_TotalAndWheat` | Food supply (kcal/cap/d)|
 
 A year missing from a source file throws an error, unless MISSING_YEAR_POLICY
 gives that series another reading.
@@ -31,10 +37,16 @@ DATA_DIR = "faostat"
 DATASETS = {
     "production": f"{DATA_DIR}/AfgThai_Production_WheatRice.csv",
     "trade":      f"{DATA_DIR}/AfgThai_ImportAndExport_WheatRice.csv",
+    "calories":   f"{DATA_DIR}/AfgThai_Calories_TotalRiceWheat.csv",
 }
 
 COUNTRIES = ("Afghanistan", "Thailand")
-COMMODITIES = ("Rice", "Wheat")
+# What each commodity is called in the files it appears in: the crop and trade
+# files go by the CPC name, the food balance sheets by FBS.
+COMMODITIES = {
+    "Rice":  {"cpc": "Rice",  "fbs": "Rice and products"},
+    "Wheat": {"cpc": "Wheat", "fbs": "Wheat and products"},
+}
 
 # The years the scores cover, inclusive on both ends.
 YEARS = (2020, 2024)
@@ -43,10 +55,12 @@ RISK_WINDOW = 5
 
 # What an absent year means for each series.
 FILL_ZERO = "fill_zero"
+CARRY_FORWARD = "carry_forward"
 MISSING_YEAR_POLICY = {
     "production": None,
     "imports":    FILL_ZERO,
     "exports":    FILL_ZERO,
+    "calories":   CARRY_FORWARD,
 }
 
 ROUND_DECIMALS = 2
@@ -76,7 +90,7 @@ def validate_and_get_series(df: pd.DataFrame, dataset: str, element: str,
                             policy: Optional[str] = None) -> pd.Series:
     """A Series of yearly values for the given element, covering the whole of
     `years`. Throws an error if there are gaps, unless `policy` says how to
-    read them."""
+    handle them."""
     missing_columns = {"Element", "Year", "Value"} - set(df.columns)
     if missing_columns:
         raise ValueError(f"expected FAOSTAT column(s) missing: {sorted(missing_columns)}")
@@ -98,15 +112,18 @@ def validate_and_get_series(df: pd.DataFrame, dataset: str, element: str,
 
     start, end = years
     missing_rows = [y for y in range(start, end + 1) if y not in series.index]
-    if missing_rows and policy != FILL_ZERO:
+    if missing_rows and policy is None:
         raise ValueError(f"{element}: no row for year(s) {missing_rows}; every year "
                          f"in {start}-{end} must be present")
     if missing_rows:
-        # Reported rather than tallied, so no filled figure is silent.
-        print(f"  filled {dataset} / {element} with zero for "
+        reading = "zero" if policy == FILL_ZERO else "the previous year"
+        print(f"  filled {dataset} / {element} with {reading} for "
               f"{', '.join(str(year) for year in missing_rows)}")
-        series = pd.concat([series, pd.Series("0", index=missing_rows)]).sort_index()
-        series = series.rename(element)
+        if policy == FILL_ZERO:
+            series = pd.concat([series, pd.Series("0", index=missing_rows)])
+        else:
+            series = series.reindex(series.index.union(missing_rows)).ffill()
+        series = series.sort_index().rename(element)
 
     span = pd.to_numeric(series.loc[start:end], errors="coerce")
     unreadable_values = span.index[span.isna()].tolist()
@@ -165,6 +182,25 @@ def internal_risk(supply_balance: pd.DataFrame) -> pd.Series:
     return coefficient_of_variation.loc[YEARS[0]:YEARS[1]].rename("risk_internal")
 
 
+def commodity_criticality(calories: pd.DataFrame, country: str,
+                          commodity: str) -> pd.Series:
+    """How essential the commodity is to the nation's diet, per year over
+    YEARS."""
+    element = "Food supply (kcal/capita/day)"
+    item = COMMODITIES[commodity]["fbs"]
+
+    def calories_from(of_item: str) -> pd.Series:
+        return validate_and_get_series(
+            rows_for_pair(calories, country, of_item), f"calories ({of_item})",
+            element, YEARS, MISSING_YEAR_POLICY["calories"])
+
+    total = calories_from("Grand Total")
+    bad_total = total.index[total <= 0].tolist()
+    if bad_total:
+        raise ValueError(f"{element}: non-positive total supply in {bad_total}")
+    return (calories_from(item) / total).rename("criticality")
+
+
 COLUMN_FORMATS = [
     ("production",    "Production (t)", "{:>16,.2f}"),
     ("imports",       "Imports (t)",    "{:>14,.2f}"),
@@ -173,6 +209,7 @@ COLUMN_FORMATS = [
     ("ssr",           "SSR",            "{:>6.2f}"),
     ("idr",           "IDR",            "{:>6.2f}"),
     ("risk_internal", "Risk_internal",  "{:>14.2f}"),
+    ("criticality",   "Criticality",    "{:>12.2f}"),
 ]
 
 
@@ -192,8 +229,6 @@ def render(df: pd.DataFrame) -> str:
 def main() -> pd.DataFrame:
     data = {name: load(path) for name, path in DATASETS.items()}
 
-    # Sorted here rather than after the fact, so the printed tables and the
-    # written rows come out in the same order however the constants are listed.
     tables = []
     for country in sorted(COUNTRIES):
         for commodity in sorted(COMMODITIES):
@@ -201,14 +236,17 @@ def main() -> pd.DataFrame:
             print(f"{country.upper()} / {commodity.upper()}  ({YEARS[0]}-{YEARS[1]})")
             print(f"Risk_internal: CV of production over a trailing "
                   f"{RISK_WINDOW}-year window")
+            print("Criticality:   the commodity's share of the national "
+                  "calorie supply")
 
-            # Built under the heading so that the fills it reports are read
-            # against the pair they belong to.
-            pair = {name: rows_for_pair(df, country, commodity)
-                    for name, df in data.items()}
+            pair = {name: rows_for_pair(data[name], country,
+                                        COMMODITIES[commodity]["cpc"])
+                    for name in ("production", "trade")}
             supply_balance = build_supply_balance(pair)
             scores = ssr_idr_scores(supply_balance)
             scores["risk_internal"] = internal_risk(supply_balance)
+            scores["criticality"] = commodity_criticality(
+                data["calories"], country, commodity)
             tables.append(scores.assign(country=country, commodity=commodity))
 
             print(render(scores))
