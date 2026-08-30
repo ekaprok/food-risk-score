@@ -29,12 +29,15 @@ import pandas as pd
 DATA_DIR = "faostat"
 
 DATASETS = {
-    "production": f"{DATA_DIR}/Afganistan_Production_Wheat.csv",
-    "trade":      f"{DATA_DIR}/Afganistan_ImportAndExport_Wheat.csv",
+    "production": f"{DATA_DIR}/AfgThai_Production_WheatRice.csv",
+    "trade":      f"{DATA_DIR}/AfgThai_ImportAndExport_WheatRice.csv",
 }
 
+COUNTRIES = ("Afghanistan", "Thailand")
+COMMODITIES = ("Rice", "Wheat")
+
 # The years the scores cover, inclusive on both ends.
-YEARS = (2019, 2024)
+YEARS = (2020, 2024)
 # Sliding window for internal risk calculation.
 RISK_WINDOW = 5
 
@@ -42,7 +45,7 @@ RISK_WINDOW = 5
 FILL_ZERO = "fill_zero"
 MISSING_YEAR_POLICY = {
     "production": None,
-    "imports":    None,
+    "imports":    FILL_ZERO,
     "exports":    FILL_ZERO,
 }
 
@@ -56,7 +59,20 @@ def load(path: str) -> pd.DataFrame:
     return df.apply(lambda col: col.str.strip())
 
 
-def validate_and_get_series(df: pd.DataFrame, element: str, years: tuple[int, int],
+def rows_for_pair(df: pd.DataFrame, country: str, commodity: str) -> pd.DataFrame:
+    """The rows of a FAOSTAT file covering one country and one commodity."""
+    missing_columns = {"Area", "Item"} - set(df.columns)
+    if missing_columns:
+        raise ValueError(f"expected FAOSTAT column(s) missing: {sorted(missing_columns)}")
+
+    selected = df[(df["Area"] == country) & (df["Item"] == commodity)]
+    if selected.empty:
+        raise ValueError(f"no rows for {country} / {commodity}")
+    return selected
+
+
+def validate_and_get_series(df: pd.DataFrame, dataset: str, element: str,
+                            years: tuple[int, int],
                             policy: Optional[str] = None) -> pd.Series:
     """A Series of yearly values for the given element, covering the whole of
     `years`. Throws an error if there are gaps, unless `policy` says how to
@@ -86,6 +102,9 @@ def validate_and_get_series(df: pd.DataFrame, element: str, years: tuple[int, in
         raise ValueError(f"{element}: no row for year(s) {missing_rows}; every year "
                          f"in {start}-{end} must be present")
     if missing_rows:
+        # Reported rather than tallied, so no filled figure is silent.
+        print(f"  filled {dataset} / {element} with zero for "
+              f"{', '.join(str(year) for year in missing_rows)}")
         series = pd.concat([series, pd.Series("0", index=missing_rows)]).sort_index()
         series = series.rename(element)
 
@@ -102,13 +121,13 @@ def build_supply_balance(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     production_years = (YEARS[0] - RISK_WINDOW + 1, YEARS[1])
     supply_balance = pd.DataFrame({
         "production": validate_and_get_series(
-            data["production"], "Production", production_years,
+            data["production"], "production", "Production", production_years,
             MISSING_YEAR_POLICY["production"]),
         "imports": validate_and_get_series(
-            data["trade"], "Import quantity", YEARS,
+            data["trade"], "trade", "Import quantity", YEARS,
             MISSING_YEAR_POLICY["imports"]),
         "exports": validate_and_get_series(
-            data["trade"], "Export quantity", YEARS,
+            data["trade"], "trade", "Export quantity", YEARS,
             MISSING_YEAR_POLICY["exports"]),
     })
     supply_balance["supply"] = (supply_balance["production"]
@@ -172,20 +191,36 @@ def render(df: pd.DataFrame) -> str:
 
 def main() -> pd.DataFrame:
     data = {name: load(path) for name, path in DATASETS.items()}
-    supply_balance = build_supply_balance(data)
-    scores = ssr_idr_scores(supply_balance)
-    scores["risk_internal"] = internal_risk(supply_balance)
 
-    print("=" * 96)
-    print(f"SUPPLY, SSR, IDR AND INTERNAL RISK  ({YEARS[0]}-{YEARS[1]})")
-    print(f"Risk_internal: CV of production over a trailing {RISK_WINDOW}-year window")
-    print(render(scores))
+    # Sorted here rather than after the fact, so the printed tables and the
+    # written rows come out in the same order however the constants are listed.
+    tables = []
+    for country in sorted(COUNTRIES):
+        for commodity in sorted(COMMODITIES):
+            print("=" * 96)
+            print(f"{country.upper()} / {commodity.upper()}  ({YEARS[0]}-{YEARS[1]})")
+            print(f"Risk_internal: CV of production over a trailing "
+                  f"{RISK_WINDOW}-year window")
 
-    scores.round(ROUND_DECIMALS).to_csv(OUT_PATH)
-    print()
+            # Built under the heading so that the fills it reports are read
+            # against the pair they belong to.
+            pair = {name: rows_for_pair(df, country, commodity)
+                    for name, df in data.items()}
+            supply_balance = build_supply_balance(pair)
+            scores = ssr_idr_scores(supply_balance)
+            scores["risk_internal"] = internal_risk(supply_balance)
+            tables.append(scores.assign(country=country, commodity=commodity))
+
+            print(render(scores))
+            print()
+
+    table = pd.concat(tables).reset_index()
+    table = table[["country", "commodity", "year"]
+                  + [key for key, _, _ in COLUMN_FORMATS]]
+    table.round(ROUND_DECIMALS).to_csv(OUT_PATH, index=False)
     print("=" * 96)
-    print(f"Wrote {len(scores)} rows to {OUT_PATH}")
-    return scores
+    print(f"Wrote {len(table)} rows to {OUT_PATH}")
+    return table
 
 
 if __name__ == "__main__":

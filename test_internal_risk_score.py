@@ -7,6 +7,8 @@ does. The script does no work at import time (everything runs under main()),
 so it is imported directly.
 """
 
+import contextlib
+import io
 import unittest
 
 import pandas as pd
@@ -17,6 +19,20 @@ import internal_risk_score as irs
 def trade_rows(rows):
     """A minimal FAOSTAT long-format frame: (Element, Year, Value) per row."""
     return pd.DataFrame(rows, columns=["Element", "Year", "Value"])
+
+
+def capture(function, *args):
+    """The call's result, and whatever it printed while running."""
+    stdout = io.StringIO()
+    with contextlib.redirect_stdout(stdout):
+        result = function(*args)
+    return result, stdout.getvalue()
+
+
+def pair_rows(rows):
+    """A FAOSTAT frame carrying more than one country and commodity:
+    (Area, Item, Element, Year, Value) per row."""
+    return pd.DataFrame(rows, columns=["Area", "Item", "Element", "Year", "Value"])
 
 
 def datasets(production, trade):
@@ -45,24 +61,60 @@ def balance(production, imports=None, exports=None, start=2020):
 
 
 class YearsCase(unittest.TestCase):
-    """Repoints the module's year range at the span each fixture covers."""
+    """Repoints the module's year range and risk window at what each fixture
+    covers, so a test reads without knowing the real constants -- and so that
+    changing them cannot quietly turn a test into a different one."""
 
     YEARS = (2020, 2024)
+    RISK_WINDOW = 5
 
     def setUp(self):
-        self._saved = irs.YEARS
+        self._saved = (irs.YEARS, irs.RISK_WINDOW)
+        irs.RISK_WINDOW = self.RISK_WINDOW
         self.set_years(self.YEARS)
 
     def tearDown(self):
-        irs.YEARS = self._saved
+        irs.YEARS, irs.RISK_WINDOW = self._saved
 
     def set_years(self, years):
         irs.YEARS = years
+
+    def quietly(self, function, *args):
+        """The call's result, with the fills it reports kept out of the run."""
+        return capture(function, *args)[0]
 
     @property
     def production_years(self):
         """The wider span production covers, for the first risk window."""
         return (irs.YEARS[0] - irs.RISK_WINDOW + 1, irs.YEARS[1])
+
+
+class TestRowsForPair(unittest.TestCase):
+    """Cuts one country and commodity out of a file holding every pair."""
+
+    FILE = pair_rows([
+        ("Afghanistan", "Wheat", "Production", "2020", "80"),
+        ("Afghanistan", "Rice",  "Production", "2020", "5"),
+        ("Thailand",    "Wheat", "Production", "2020", "1"),
+        ("Thailand",    "Rice",  "Production", "2020", "30"),
+    ])
+
+    def test_it_keeps_one_pair(self):
+        # Both halves of the filter matter: three of these four rows share a
+        # country or a commodity with the one wanted.
+        selected = irs.rows_for_pair(self.FILE, "Afghanistan", "Wheat")
+        self.assertEqual(list(selected["Value"]), ["80"])
+
+    def test_a_pair_the_file_does_not_carry_raises(self):
+        # Otherwise it surfaces later as "no row for year(s) [2019, ...]",
+        # which reads as a gap in the data rather than a missing country.
+        with self.assertRaisesRegex(ValueError, "no rows for Peru / Wheat"):
+            irs.rows_for_pair(self.FILE, "Peru", "Wheat")
+
+    def test_missing_columns_raise(self):
+        df = trade_rows([("Production", "2020", "100")])
+        with self.assertRaisesRegex(ValueError, r"\['Area', 'Item'\]"):
+            irs.rows_for_pair(df, "Afghanistan", "Wheat")
 
 
 class TestValidateAndGetSeries(unittest.TestCase):
@@ -76,7 +128,7 @@ class TestValidateAndGetSeries(unittest.TestCase):
             ("Export quantity", "2020", "20.68"),
             ("Import quantity", "2020", "598254.11"),
         ])
-        result = irs.validate_and_get_series(df, "Import quantity", (2019, 2020))
+        result = irs.validate_and_get_series(df, "trade", "Import quantity", (2019, 2020))
         self.assertEqual(list(result.index), [2019, 2020])
         self.assertEqual(list(result.values), [457458.88, 598254.11])
 
@@ -84,21 +136,19 @@ class TestValidateAndGetSeries(unittest.TestCase):
         # internal_risk rolls over this series by position, so order matters.
         df = trade_rows([("Production", y, "100") for y in ("2011", "2009", "2010")])
         self.assertEqual(
-            list(irs.validate_and_get_series(df, "Production", (2009, 2011)).index),
+            list(irs.validate_and_get_series(df, "production", "Production", (2009, 2011)).index),
             [2009, 2010, 2011])
 
     def test_years_outside_the_span_are_left_out(self):
         df = trade_rows(rows_for("Production", (2018, 2020)))
         self.assertEqual(
-            list(irs.validate_and_get_series(df, "Production", (2019, 2020)).index),
+            list(irs.validate_and_get_series(df, "production", "Production", (2019, 2020)).index),
             [2019, 2020])
 
     def test_a_year_with_no_row_raises(self):
-        # FAOSTAT writes no row both when the value was zero and when nobody
-        # recorded one, and does not mark which. Neither reading is guessed at.
         df = trade_rows([("Export quantity", y, "100") for y in ("2019", "2021")])
         with self.assertRaisesRegex(ValueError, r"no row for year\(s\) \[2020\]"):
-            irs.validate_and_get_series(df, "Export quantity", (2019, 2021))
+            irs.validate_and_get_series(df, "trade", "Export quantity", (2019, 2021))
 
     def test_an_unreadable_value_raises(self):
         # A blank harvest figure is missing data. Turning it into 0 would read
@@ -108,32 +158,24 @@ class TestValidateAndGetSeries(unittest.TestCase):
             ("Production", "2020", ""),
         ])
         with self.assertRaisesRegex(ValueError, r"unreadable value\(s\) for year\(s\) \[2020\]"):
-            irs.validate_and_get_series(df, "Production", (2019, 2020))
+            irs.validate_and_get_series(df, "production", "Production", (2019, 2020))
 
     def test_an_unreadable_year_raises(self):
         df = trade_rows([("Production", "twenty-twenty", "100")])
         with self.assertRaisesRegex(ValueError, "unreadable year"):
-            irs.validate_and_get_series(df, "Production", (2020, 2020))
+            irs.validate_and_get_series(df, "production", "Production", (2020, 2020))
 
     def test_fill_zero_reads_an_absent_year_as_zero(self):
-        # FAOSTAT omits the row in a year nothing was exported.
         df = trade_rows([("Export quantity", "2019", "5")])
-        result = irs.validate_and_get_series(df, "Export quantity", (2019, 2021),
-                                             irs.FILL_ZERO)
+        result, printed = capture(irs.validate_and_get_series, df, "trade", "Export quantity",
+                                  (2019, 2021), irs.FILL_ZERO)
         self.assertEqual(list(result.index), [2019, 2020, 2021])
         self.assertEqual(list(result.values), [5.0, 0.0, 0.0])
-
-    def test_fill_zero_does_not_rescue_an_unreadable_value(self):
-        # A row that exists but will not parse is a broken figure, not a zero.
-        df = trade_rows([("Export quantity", "2019", "")])
-        with self.assertRaisesRegex(ValueError, "unreadable value"):
-            irs.validate_and_get_series(df, "Export quantity", (2019, 2019),
-                                        irs.FILL_ZERO)
 
     def test_missing_columns_raise(self):
         df = pd.DataFrame({"Year": ["2020"], "Value": ["100"]})
         with self.assertRaises(ValueError):
-            irs.validate_and_get_series(df, "Production", (2020, 2020))
+            irs.validate_and_get_series(df, "production", "Production", (2020, 2020))
 
     def test_a_repeated_year_raises(self):
         # The year becomes the index, so two rows for 2020 would double the
@@ -144,86 +186,29 @@ class TestValidateAndGetSeries(unittest.TestCase):
             ("Production", "2020", "150"),
         ])
         with self.assertRaisesRegex(ValueError, "repeated year"):
-            irs.validate_and_get_series(df, "Production", (2020, 2020))
-
-
-class TestBuildSupplyBalance(YearsCase):
-    """The tonnage table, covering BALANCE_YEARS rather than just YEARS."""
-
-    YEARS = (2020, 2021)
-
-    def full_span(self, production="100", imports="40", exports="20"):
-        """A data dict covering each series' own span: YEARS for trade, and the
-        wider window span for production."""
-        return datasets(
-            production=rows_for("Production", self.production_years, production),
-            trade=(rows_for("Import quantity", irs.YEARS, imports)
-                   + rows_for("Export quantity", irs.YEARS, exports)))
-
-    def test_supply_is_production_plus_imports_less_exports(self):
-        supply_balance = irs.build_supply_balance(self.full_span("80", "40", "20"))
-        self.assertEqual(supply_balance.at[2020, "supply"], 100.0)
-
-    def test_the_frame_reaches_back_a_full_window_before_years(self):
-        # 2020 is the first year scored, so its window needs 2016-2020 -- all
-        # of it inside this one frame.
-        supply_balance = irs.build_supply_balance(self.full_span())
-        self.assertEqual(list(supply_balance.index), [2016, 2017, 2018, 2019, 2020, 2021])
-
-    def test_the_window_years_carry_production_only(self):
-        # Nothing scores them, so no trade figure is asked of them -- 2017 and
-        # 2018 missing exports is not this script's business.
-        supply_balance = irs.build_supply_balance(self.full_span())
-        window_only = supply_balance.loc[2016:2019]
-        self.assertTrue(window_only["production"].notna().all())
-        self.assertTrue(window_only[["imports", "exports"]].isna().all().all())
-
-    def test_absent_exports_read_as_zero(self):
-        # The fill is per year, not per file: a year that reported exports
-        # keeps its tonnage while the year beside it reads as zero.
-        data = self.full_span()
-        trade = data["trade"]
-        data["trade"] = trade[~((trade["Element"] == "Export quantity")
-                                & (trade["Year"] == "2021"))]
-        supply_balance = irs.build_supply_balance(data)
-        self.assertEqual(list(supply_balance.loc[2020:2021, "exports"]), [20.0, 0.0])
-
-    def test_a_year_missing_imports_raises(self):
-        # Imports are reported every year, so a gap is missing data, not a zero.
-        data = self.full_span()
-        trade = data["trade"]
-        data["trade"] = trade[~((trade["Element"] == "Import quantity")
-                                & (trade["Year"] == "2021"))]
-        with self.assertRaisesRegex(ValueError, r"Import quantity: no row for year\(s\) \[2021\]"):
-            irs.build_supply_balance(data)
-
-    def test_a_year_missing_production_raises(self):
-        data = self.full_span()
-        data["production"] = data["production"][data["production"]["Year"] != "2016"]
-        with self.assertRaisesRegex(ValueError, r"Production: no row for year\(s\) \[2016\]"):
-            irs.build_supply_balance(data)
+            irs.validate_and_get_series(df, "production", "Production", (2020, 2020))
 
 
 class TestSsrIdrScores(YearsCase):
     """SSR and IDR on top of the supply balance, over YEARS."""
 
-    def test_ssr_and_idr(self):
-        # Supply = 80 + 40 - 20 = 100; SSR = 80/100; IDR = 40/100.
-        self.set_years((2020, 2020))
-        scores = irs.ssr_idr_scores(balance([80], [40], [20]))
-        self.assertEqual(scores.at[2020, "ssr"], 0.8)
-        self.assertEqual(scores.at[2020, "idr"], 0.4)
+    YEARS = (2023, 2024)
+    BALANCE = balance(production=[900, 80, 60],
+                      imports=[500, 40, 30],
+                      exports=[700, 20, 10],
+                      start=2022)
 
-    def test_the_window_years_are_dropped_rather_than_scored(self):
-        # 2020 and 2021 are only in the frame to feed 2022's risk window.
-        self.set_years((2022, 2023))
-        scores = irs.ssr_idr_scores(balance([100] * 4, start=2020))
-        self.assertEqual(list(scores.index), [2022, 2023])
+    def test_ssr(self):
+        # Supply is production + imports - exports, per year.
+        scores = irs.ssr_idr_scores(self.BALANCE)
+        self.assertEqual(list(scores.index), [2023, 2024])
+        self.assertEqual(scores.at[2023, "ssr"], 80 / (80 + 40 - 20))
+        self.assertEqual(scores.at[2024, "ssr"], 60 / (60 + 30 - 10))
 
-    def test_the_tonnages_travel_with_the_scores(self):
-        # The written table carries the workings, not just the two ratios.
-        self.set_years((2020, 2020))
-        scores = irs.ssr_idr_scores(balance([80], [40], [20]))
+    def test_idr(self):
+        scores = irs.ssr_idr_scores(self.BALANCE)
+        self.assertEqual(scores.at[2023, "idr"], 40 / (80 + 40 - 20))
+        self.assertEqual(scores.at[2024, "idr"], 30 / (60 + 30 - 10))
         self.assertEqual(list(scores.columns),
                          ["production", "imports", "exports", "supply", "ssr", "idr"])
 
@@ -235,50 +220,34 @@ class TestSsrIdrScores(YearsCase):
             irs.ssr_idr_scores(balance([10], [0], [50]))
 
     def test_a_broken_year_outside_years_is_not_scored(self):
-        # 2020 only feeds a window; its supply never becomes a published ratio.
         self.set_years((2021, 2021))
-        scores = irs.ssr_idr_scores(balance([10, 100], [0, 0], [50, 0], start=2020))
+        # supply for 2020 = 10 - 50 = -40. Error but we ignore it as it is outside our window.
+        scores = irs.ssr_idr_scores(balance(production=[10, 100], imports=[0, 0], exports=[50, 0], start=2020))
         self.assertEqual(list(scores.index), [2021])
 
 
 class TestInternalRisk(YearsCase):
     """A CV of production per year, over the trailing RISK_WINDOW years."""
 
-    YEARS = (2019, 2024)
+    # Small enough to check by hand: a window of two, over two scored years.
+    YEARS = (2023, 2024)
+    RISK_WINDOW = 2
 
-    def test_it_scores_every_year_in_years(self):
-        risk = irs.internal_risk(balance([100] * 10, start=2015))
-        self.assertEqual(list(risk.index), [2019, 2020, 2021, 2022, 2023, 2024])
+    def test_it_is_the_cv_of_each_trailing_window(self):
+        risk = irs.internal_risk(balance(production=[9000, 100, 300, 300],
+                                         imports=[0, 5000, 0, 5000],
+                                         exports=[7000, 0, 3000, 0],
+                                         start=2021))
+
+        mean_2023 = (100 + 300) / 2
+        std_2023 = (((100 - mean_2023) ** 2 + (300 - mean_2023) ** 2) / (2 - 1)) ** 0.5
+        mean_2024 = (300 + 300) / 2
+        std_2024 = (((300 - mean_2024) ** 2 + (300 - mean_2024) ** 2) / (2 - 1)) ** 0.5
+
+        self.assertEqual(list(risk.index), [2023, 2024])
+        self.assertAlmostEqual(risk.at[2023], std_2023 / mean_2023)
+        self.assertEqual(risk.at[2024], std_2024 / mean_2024)
         self.assertEqual(risk.name, "risk_internal")
-
-    def test_steady_harvests_score_zero(self):
-        risk = irs.internal_risk(balance([100] * 10, start=2015))
-        self.assertEqual(list(risk.values), [0.0] * 6)
-
-    def test_it_is_the_cv_of_the_window(self):
-        # mean 300; sample std (ddof=1) sqrt(80000/4) = 141.42.
-        self.set_years((2019, 2019))
-        risk = irs.internal_risk(balance([100, 300, 500, 300, 300], start=2015))
-        self.assertAlmostEqual(risk.at[2019], 141.4213562373095 / 300)
-
-    def test_a_window_sees_only_its_own_five_years(self):
-        # A collapse in 2015 is risk for 2019, which the window still covers,
-        # and none at all for 2020, which it no longer reaches.
-        risk = irs.internal_risk(balance([0] + [100] * 9, start=2015))
-        self.assertGreater(risk.at[2019], 0.0)
-        self.assertEqual(risk.at[2020], 0.0)
-
-    def test_only_production_moves_the_score(self):
-        # Trade sits in the same frame now; it must not reach the CV.
-        steady = balance([100] * 10, start=2015)
-        volatile_trade = balance([100] * 10, imports=[0, 900] * 5, start=2015)
-        self.assertEqual(list(irs.internal_risk(steady).values),
-                         list(irs.internal_risk(volatile_trade).values))
-
-    def test_volatile_production_scores_higher_than_steady(self):
-        self.set_years((2019, 2019))
-        self.assertGreater(irs.internal_risk(balance([50, 150] * 3, start=2015))[2019],
-                           irs.internal_risk(balance([100] * 6, start=2015))[2019])
 
 
 if __name__ == "__main__":

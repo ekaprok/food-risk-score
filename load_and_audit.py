@@ -21,8 +21,8 @@ DATA_DIR = "faostat"
 #   _mirror each exporter reports its sales; suppliers sit in `Reporter Countries`
 # Never summed -- see food_risk_score.py, which selects one per year.
 DATASETS = {
-    "production":          f"{DATA_DIR}/Afganistan_Production_Wheat.csv",
-    "trade":               f"{DATA_DIR}/Afganistan_ImportAndExport_Wheat.csv",
+    "production":          f"{DATA_DIR}/AfgThai_Production_WheatRice.csv",
+    "trade":               f"{DATA_DIR}/AfgThai_ImportAndExport_WheatRice.csv",
     "calories":            f"{DATA_DIR}/Afganistan_Calories_TotalAndWheat.csv",
     "trade_matrix_self":   f"{DATA_DIR}/Afganistan_Trade_PartnerAll_Wheat.csv",
     "trade_matrix_mirror": f"{DATA_DIR}/Afganistan_Trade_ReporterAll_Wheat.csv",
