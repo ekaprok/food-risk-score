@@ -5,6 +5,12 @@ Builds the internal supply metrics from the FAOSTAT CSVs`:
     Supply        = P + I - E         apparent domestic supply, per year
     SSR           = P / Supply        self-sufficiency ratio, per year
     IDR           = I / Supply        import dependency ratio, per year
+    W_internal    = P / (P + I)       the share of the inflows the country
+                                      grew itself, per year
+    W_external    = I / (P + I)       and the share it bought in. Taken over
+                                      the inflows rather than over apparent
+                                      supply, so the two sum to 1 whatever the
+                                      country exports
     Risk_internal = std(P) / mean(P)  coefficient of variation of production
                                       over the trailing RISK_WINDOW years,
                                       one figure per year
@@ -16,10 +22,12 @@ Builds the internal supply metrics from the FAOSTAT CSVs`:
     Risk_external = sum(si^2)         supplier-concentration risk, per year:
                                       the Herfindahl-Hirschman index of the
                                       import suppliers' shares
-    V             = SSR * Risk_internal + IDR * Risk_external
-                                      vulnerability, per year.
-                                      Built from the terms above, not from a
-                                      source file of its own.
+    V             = W_internal * Risk_internal + W_external * Risk_external
+                                      vulnerability, per year, when
+                                      USE_PROPORTIONAL_WEIGHTS is on;
+                                      SSR * Risk_internal + IDR * Risk_external
+                                      when it is off. Built from the terms
+                                      above, not from a source file of its own.
     Food_risk     = V * C_kcal        food security risk, per year: the
                                       vulnerability weighted by how much the
                                       diet leans on the commodity. Built from
@@ -76,6 +84,8 @@ MISSING_YEAR_POLICY = {
     "calories":   CARRY_FORWARD,
     "suppliers":  FILL_ZERO,
 }
+
+USE_PROPORTIONAL_WEIGHTS = True
 
 ROUND_DECIMALS = 2
 OUT_PATH = "internal_risk_score.csv"
@@ -184,10 +194,12 @@ def build_supply_balance(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     return supply_balance
 
 
-def ssr_idr_scores(supply_balance: pd.DataFrame) -> pd.DataFrame:
-    """The supply balance over YEARS, plus the SSR and IDR columns. The earlier
-    years exist only to feed the internal-risk window, so they are dropped here
-    rather than scored."""
+def supply_ratios(supply_balance: pd.DataFrame) -> pd.DataFrame:
+    """The supply balance over YEARS, plus the SSR and IDR ratios and the
+    proportional weights W_internal and W_external, the shares of the inflows
+    (P + I). Both pairs are always computed. The earlier years exist only to
+    feed the internal-risk window, so they are dropped here rather than
+    scored."""
     start, end = YEARS
     scores = supply_balance.loc[start:end].copy()
 
@@ -200,6 +212,10 @@ def ssr_idr_scores(supply_balance: pd.DataFrame) -> pd.DataFrame:
 
     scores["ssr"] = scores["production"] / scores["supply"]
     scores["idr"] = scores["imports"] / scores["supply"]
+
+    inflows = scores["production"] + scores["imports"]
+    scores["w_internal"] = scores["production"] / inflows
+    scores["w_external"] = scores["imports"] / inflows
     return scores
 
 
@@ -281,12 +297,16 @@ def commodity_criticality(calories: pd.DataFrame, country: str,
 
 
 def vulnerability_score(scores: pd.DataFrame) -> pd.Series:
-    """How exposed the country is on this commodity, per year over YEARS: what
-    it grows for itself weighted by how unsteady its harvests are, plus what it
-    imports weighted by how concentrated its suppliers are. Every term arrives
-    validated from the function that built it, so this only combines them."""
-    return (scores["ssr"] * scores["risk_internal"]
-            + scores["idr"] * scores["risk_external"]).rename("vulnerability")
+    """How exposed the country is on this commodity, per year over YEARS. The
+    two shares are W_internal and W_external when USE_PROPORTIONAL_WEIGHTS is
+    on and SSR and IDR when it is off. Every term arrives validated from the
+    function that built it, so this only combines them."""
+    if USE_PROPORTIONAL_WEIGHTS:
+        internal, external = scores["w_internal"], scores["w_external"]
+    else:
+        internal, external = scores["ssr"], scores["idr"]
+    return (internal * scores["risk_internal"]
+            + external * scores["risk_external"]).rename("vulnerability")
 
 
 def food_risk(scores: pd.DataFrame) -> pd.Series:
@@ -304,6 +324,8 @@ COLUMN_FORMATS = [
     ("supply",        "Supply (t)",     "{:>16,.2f}"),
     ("ssr",           "SSR",            "{:>6.2f}"),
     ("idr",           "IDR",            "{:>6.2f}"),
+    ("w_internal",    "W_internal",     "{:>11.2f}"),
+    ("w_external",    "W_external",     "{:>11.2f}"),
     ("risk_internal", "Risk_internal",  "{:>14.2f}"),
     ("risk_external", "Risk_external",  "{:>14.2f}"),
     ("criticality",   "Criticality",    "{:>12.2f}"),
@@ -311,10 +333,9 @@ COLUMN_FORMATS = [
     ("food_risk",     "Food_risk",      "{:>10.2f}"),
 ]
 
-
-# What each score column is called in the output CSV: the term, then the
-# abbreviation or formula it stands for. Only the CSV uses these; the rendered
-# table keeps the short titles in COLUMN_FORMATS so its columns stay narrow.
+VULNERABILITY_FORMULA = ("W_internal x Risk_internal + W_external x Risk_external"
+                         if USE_PROPORTIONAL_WEIGHTS else
+                         "SSR x Risk_internal + IDR x Risk_external")
 CSV_COLUMN_NAMES = {
     "production":    "production (P)",
     "imports":       "imports (I)",
@@ -322,10 +343,12 @@ CSV_COLUMN_NAMES = {
     "supply":        "supply (P + I - E)",
     "ssr":           "ssr (P / Supply)",
     "idr":           "idr (I / Supply)",
+    "w_internal":    "w_internal (P / (P + I))",
+    "w_external":    "w_external (I / (P + I))",
     "risk_internal": "risk_internal (std(P) / mean(P))",
     "risk_external": "risk_external (sum(si^2))",
     "criticality":   "criticality (Kcal_commodity / Kcal_total)",
-    "vulnerability": "vulnerability (SSR x Risk_internal + IDR x Risk_external)",
+    "vulnerability": f"vulnerability ({VULNERABILITY_FORMULA})",
     "food_risk":     "food_risk (Vulnerability x Criticality)",
 }
 
@@ -357,14 +380,14 @@ def main() -> pd.DataFrame:
                   "(1/n spread out, 1.0 a single supplier)")
             print("Criticality:   the commodity's share of the national "
                   "calorie supply")
-            print("Vulnerability: SSR x Risk_internal + IDR x Risk_external")
+            print(f"Vulnerability: {VULNERABILITY_FORMULA}")
             print("Food_risk:     Vulnerability x Criticality")
 
             pair = {name: rows_for_pair(data[name], country,
                                         COMMODITIES[commodity]["cpc"])
                     for name in ("production", "trade")}
             supply_balance = build_supply_balance(pair)
-            scores = ssr_idr_scores(supply_balance)
+            scores = supply_ratios(supply_balance)
             scores["risk_internal"] = internal_risk(supply_balance)
             scores["risk_external"] = external_risk(
                 data["trade_matrix_mirror"], country, commodity)

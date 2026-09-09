@@ -37,11 +37,14 @@ Read-only audit of the five FAOSTAT CSVs.
 python3 internal_risk_score.py
 ```
 
-Calculates SSR, IDR, internal risk, external supplier-concentration
+Calculates SSR, IDR, the proportional weights `W_internal` (`P / (P + I)`) and
+`W_external` (`I / (P + I)`), internal risk, external supplier-concentration
 risk (the HHI of the import suppliers' shares), the vulnerability score that
-combines them (`SSR x Risk_internal + IDR x Risk_external`) and the food
-security risk (`Vulnerability x Criticality`). The following parameters can be
-configured:
+combines a pair of weights with the two risks, and the food security risk
+(`Vulnerability x Criticality`). Both pairs of weights are always calculated
+and written out; `USE_PROPORTIONAL_WEIGHTS` picks which pair the vulnerability
+score uses, and the CSV column names the formula it was calculated with. The
+following parameters can be configured:
 
 - `DATA_DIR`: path to the FAOSTAT CSVs (default: `"faostat"`)
 - `OUT_PATH`: where the output CSV is written (default:
@@ -51,6 +54,12 @@ configured:
   maps a display name to the spelling used in each source: `cpc` (`wheat`) for the
   production and trade datasets, `fbs` (`wheat and products`) for the food balance dataset.
 - `YEARS`: the first and last year to score, inclusive (default: 2020-2024).
+- `USE_PROPORTIONAL_WEIGHTS`: which weights the vulnerability score uses
+  (default: `True`). `True` gives
+  `W_internal x Risk_internal + W_external x Risk_external`, splitting the
+  score over the inflows (`P + I`), so the weights sum to 1
+  whatever it exports. `False` gives the original
+  `SSR x Risk_internal + IDR x Risk_external`, taken over apparent supply.
 - `RISK_WINDOW`: how many years the internal risk (coefficient of variation of
   production) looks back over, including the current year (default: 5).
 - `MISSING_YEAR_POLICY`: how to read a year absent from a source series, one

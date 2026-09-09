@@ -10,6 +10,7 @@ so it is imported directly.
 import contextlib
 import io
 import unittest
+import unittest.mock
 
 import pandas as pd
 
@@ -213,8 +214,7 @@ class TestValidateAndGetSeries(unittest.TestCase):
             irs.validate_and_get_series(df, "production", "Production", (2020, 2020))
 
 
-class TestSsrIdrScores(YearsCase):
-    """SSR and IDR on top of the supply balance, over YEARS."""
+class TestSupplyRatios(YearsCase):
 
     YEARS = (2023, 2024)
     BALANCE = balance(production=[900, 80, 60],
@@ -224,29 +224,39 @@ class TestSsrIdrScores(YearsCase):
 
     def test_ssr(self):
         # Supply is production + imports - exports, per year.
-        scores = irs.ssr_idr_scores(self.BALANCE)
+        scores = irs.supply_ratios(self.BALANCE)
         self.assertEqual(list(scores.index), [2023, 2024])
         self.assertEqual(scores.at[2023, "ssr"], 80 / (80 + 40 - 20))
         self.assertEqual(scores.at[2024, "ssr"], 60 / (60 + 30 - 10))
 
     def test_idr(self):
-        scores = irs.ssr_idr_scores(self.BALANCE)
+        scores = irs.supply_ratios(self.BALANCE)
         self.assertEqual(scores.at[2023, "idr"], 40 / (80 + 40 - 20))
         self.assertEqual(scores.at[2024, "idr"], 30 / (60 + 30 - 10))
         self.assertEqual(list(scores.columns),
-                         ["production", "imports", "exports", "supply", "ssr", "idr"])
+                         ["production", "imports", "exports", "supply", "ssr", "idr",
+                          "w_internal", "w_external"])
+
+    def test_the_weights_split_the_inflows(self):
+        scores = irs.supply_ratios(self.BALANCE)
+        self.assertEqual(scores.at[2023, "w_internal"], 80 / (80 + 40))
+        self.assertEqual(scores.at[2023, "w_external"], 40 / (80 + 40))
+        self.assertEqual(scores.at[2024, "w_internal"], 60 / (60 + 30))
+        self.assertEqual(scores.at[2024, "w_external"], 30 / (60 + 30))
+        pairs = scores["w_internal"] + scores["w_external"]
+        self.assertEqual(pairs.tolist(), [1.0, 1.0])
 
     def test_non_positive_supply_raises(self):
         # Exports exceeding production + imports is a broken input, not a
         # 0%-dependency country. A negative SSR should never reach the table.
         self.set_years((2020, 2020))
         with self.assertRaisesRegex(ValueError, "non-positive apparent supply"):
-            irs.ssr_idr_scores(balance([10], [0], [50]))
+            irs.supply_ratios(balance([10], [0], [50]))
 
     def test_a_broken_year_outside_years_is_not_scored(self):
         self.set_years((2021, 2021))
         # supply for 2020 = 10 - 50 = -40. Error but we ignore it as it is outside our window.
-        scores = irs.ssr_idr_scores(balance(production=[10, 100], imports=[0, 0], exports=[50, 0], start=2020))
+        scores = irs.supply_ratios(balance(production=[10, 100], imports=[0, 0], exports=[50, 0], start=2020))
         self.assertEqual(list(scores.index), [2021])
 
 
@@ -415,16 +425,30 @@ class TestExternalRisk(YearsCase):
 
 
 class TestVulnerabilityScore(unittest.TestCase):
-    """Each half of the supply weighted by the risk it carries. It reads no
-    module constants and no files, so the scores go in by hand."""
+    """Each half of the supply weighted by the risk it carries. It reads only
+    USE_PROPORTIONAL_WEIGHTS and no files, so the scores go in by hand and the
+    flag is set per test. The two pairs of weights differ, so which pair the
+    flag picked is visible in the result."""
 
-    def test_vulnerability_score(self):
-        scores = pd.DataFrame(
-            {"ssr": [0.8, 0.5], "idr": [0.2, 0.5],
-             "risk_internal": [0.1, 0.4], "risk_external": [0.5, 0.6]},
-            index=[2020, 2021], dtype=float)
+    SCORES = pd.DataFrame(
+        {"ssr": [0.8, 0.5], "idr": [0.2, 0.5],
+         "w_internal": [0.7, 0.3], "w_external": [0.3, 0.7],
+         "risk_internal": [0.1, 0.4], "risk_external": [0.5, 0.6]},
+        index=[2020, 2021], dtype=float)
 
-        score = irs.vulnerability_score(scores)
+    def test_proportional_weights_on_uses_w_internal_and_w_external(self):
+        with unittest.mock.patch.object(irs, "USE_PROPORTIONAL_WEIGHTS", True):
+            score = irs.vulnerability_score(self.SCORES)
+
+        self.assertEqual(list(score.index), [2020, 2021])
+        first, second = score.tolist()
+        self.assertAlmostEqual(first, 0.7 * 0.1 + 0.3 * 0.5)
+        self.assertAlmostEqual(second, 0.3 * 0.4 + 0.7 * 0.6)
+        self.assertEqual(score.name, "vulnerability")
+
+    def test_proportional_weights_off_uses_ssr_and_idr(self):
+        with unittest.mock.patch.object(irs, "USE_PROPORTIONAL_WEIGHTS", False):
+            score = irs.vulnerability_score(self.SCORES)
 
         self.assertEqual(list(score.index), [2020, 2021])
         first, second = score.tolist()
