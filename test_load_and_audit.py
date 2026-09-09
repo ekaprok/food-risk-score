@@ -15,6 +15,7 @@ import ast
 import pathlib
 import tempfile
 import unittest
+from typing import Any
 
 import pandas as pd
 
@@ -25,13 +26,13 @@ WANTED = {
 }
 
 _tree = ast.parse(SCRIPT.read_text(encoding="utf-8"), filename=str(SCRIPT))
-_defs = [
+_defs: list[ast.stmt] = [
     node for node in _tree.body
     if (isinstance(node, ast.FunctionDef) and node.name in WANTED)
     or (isinstance(node, ast.Assign)
         and {t.id for t in node.targets if isinstance(t, ast.Name)} & WANTED)
 ]
-_ns = {"pd": pd}  # load() closes over the module-level pandas import
+_ns: dict[str, Any] = {"pd": pd}  # load() closes over the module-level pandas import
 exec(compile(ast.Module(body=_defs, type_ignores=[]), str(SCRIPT), "exec"), _ns)
 
 load = _ns["load"]

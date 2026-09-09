@@ -50,4 +50,7 @@ Google Colab, so Colab compatibility is a hard requirement.
 - Run scripts from the project root: `python3 <script>.py`.
 - Tests use the standard `unittest`/`pytest` layout in `test_*.py`; run
   `python3 -m pytest` after changes and keep tests passing.
+- Keep the tree clean under the checkers configured in `pyrightconfig.json`
+  (type checking, standard mode against Python 3.9) and `ruff.toml`. Both read
+  the local `.venv`, which carries `pandas-stubs`; see README "Editor setup".
 - Update `README.md` when adding a script or changing how one is run.

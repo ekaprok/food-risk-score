@@ -167,8 +167,8 @@ class TestValidateAndGetSeries(unittest.TestCase):
 
     def test_fill_zero_reads_an_absent_year_as_zero(self):
         df = trade_rows([("Export quantity", "2019", "5")])
-        result, printed = capture(irs.validate_and_get_series, df, "trade", "Export quantity",
-                                  (2019, 2021), irs.FILL_ZERO)
+        result, _printed = capture(irs.validate_and_get_series, df, "trade", "Export quantity",
+                                   (2019, 2021), irs.FILL_ZERO)
         self.assertEqual(list(result.index), [2019, 2020, 2021])
         self.assertEqual(list(result.values), [5.0, 0.0, 0.0])
 
@@ -183,10 +183,10 @@ class TestValidateAndGetSeries(unittest.TestCase):
     def test_carry_forward_with_nothing_yet_to_carry_raises(self):
         # 2019 comes before every row on file, so no reading carries into it.
         df = trade_rows([("Production", "2020", "5")])
-        with self.assertRaisesRegex(ValueError, r"unreadable value\(s\) for year\(s\) \[2019\]"):
-            with contextlib.redirect_stdout(io.StringIO()):
-                irs.validate_and_get_series(df, "calories", "Production",
-                                            (2019, 2020), irs.CARRY_FORWARD)
+        with self.assertRaisesRegex(ValueError, r"unreadable value\(s\) for year\(s\) \[2019\]"), \
+                contextlib.redirect_stdout(io.StringIO()):
+            irs.validate_and_get_series(df, "calories", "Production",
+                                        (2019, 2020), irs.CARRY_FORWARD)
 
     def test_missing_columns_raise(self):
         df = pd.DataFrame({"Year": ["2020"], "Value": ["100"]})
@@ -298,7 +298,7 @@ class TestCommodityCriticality(YearsCase):
                                  "Afghanistan", "Wheat")
 
         self.assertEqual(list(score.index), [2020, 2021, 2022])
-        self.assertAlmostEqual(score.at[2022], 500 / 2500)
+        self.assertAlmostEqual(float(score.loc[2022]), 500 / 2500)
         self.assertIn("2022", printed)
 
     def test_a_non_positive_total_raises(self):

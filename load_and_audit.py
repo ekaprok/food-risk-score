@@ -19,7 +19,7 @@ DATA_DIR = "faostat"
 # The two trade matrices are the same flows seen from opposite ends:
 #   _self   Afghanistan reports its imports; suppliers sit in `Partner Countries`
 #   _mirror each exporter reports its sales; suppliers sit in `Reporter Countries`
-# Never summed -- see food_risk_score.py, which selects one per year.
+# Never summed: a flow both ends reported would be counted twice.
 DATASETS = {
     "production":          f"{DATA_DIR}/AfgThai_Production_WheatRice.csv",
     "trade":               f"{DATA_DIR}/AfgThai_ImportAndExport_WheatRice.csv",
@@ -112,8 +112,9 @@ for name, df in data.items():
         print(f"\n  Suppliers per year (from '{col}')")
         counts = (df.assign(_y=pd.to_numeric(df["Year"], errors="coerce"))
                     .dropna(subset=["_y"])
-                    .groupby("_y")[col].nunique().astype(int))
-        line = ", ".join(f"{int(y)}:{n}" for y, n in counts.items())
+                    .astype({"_y": int})
+                    .groupby("_y")[col].nunique())
+        line = ", ".join(f"{y}:{n}" for y, n in counts.items())
         print(f"    {line}")
         print(f"    {counts.size} year(s), {df[col].nunique()} distinct supplier(s), "
               f"median {int(counts.median())} per year")

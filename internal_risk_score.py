@@ -27,7 +27,7 @@ A year missing from a source file throws an error, unless MISSING_YEAR_POLICY
 gives that series another reading.
 """
 
-from typing import Optional
+from __future__ import annotations
 
 import pandas as pd
 
@@ -88,7 +88,7 @@ def rows_for_pair(df: pd.DataFrame, country: str, commodity: str) -> pd.DataFram
 
 def validate_and_get_series(df: pd.DataFrame, dataset: str, element: str,
                             years: tuple[int, int],
-                            policy: Optional[str] = None) -> pd.Series:
+                            policy: str | None = None) -> pd.Series:
     """A Series of yearly values for the given element, covering the whole of
     `years`. Throws an error if there are gaps, unless `policy` says how to
     handle them."""

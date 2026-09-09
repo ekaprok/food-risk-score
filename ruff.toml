@@ -1,0 +1,8 @@
+# README promises Python 3.9+; AGENTS.md targets the Colab runtime (3.10).
+# Checking against the lower bound keeps the scripts valid on both.
+target-version = "py39"
+
+[lint.per-file-ignores]
+# The tests exec only the definitions under test, so importing the cell-style
+# script does not run its audit. See the module docstring.
+"test_load_and_audit.py" = ["S102"]

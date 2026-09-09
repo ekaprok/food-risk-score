@@ -56,5 +56,20 @@ Calculates SSR, IDR and internal risk. The following parameters can be configure
 ## Tests
 
 ```bash
-python3 -m unittest test_internal_risk_score test_external_risk_score test_load_and_audit
+python3 -m unittest test_internal_risk_score test_load_and_audit
 ```
+
+## Editor setup (optional)
+
+The scripts only need pandas, but a type checker reading them needs pandas'
+type stubs, or it flags every pandas call as an unknown type. A local
+environment with the stubs installed keeps the editor quiet:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install pandas pandas-stubs pytest
+```
+
+`pyrightconfig.json` points the type checker at `.venv` and checks against
+Python 3.9, the version this project supports. `ruff.toml` does the same for
+the linter. Neither file affects how the scripts run; `.venv` is not committed.
