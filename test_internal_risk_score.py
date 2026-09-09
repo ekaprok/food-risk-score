@@ -35,6 +35,14 @@ def pair_rows(rows):
     return pd.DataFrame(rows, columns=["Area", "Item", "Element", "Year", "Value"])
 
 
+def matrix_rows(rows):
+    """A FAOSTAT trade matrix: mirror data, so the supplier is the reporter and
+    the importing country is the partner. (Reporter Countries, Partner
+    Countries, Item, Element, Year, Value) per row."""
+    return pd.DataFrame(rows, columns=["Reporter Countries", "Partner Countries",
+                                       "Item", "Element", "Year", "Value"])
+
+
 def datasets(production, trade):
     """A data dict shaped like the one main() loads, from row tuples."""
     return {"production": trade_rows(production), "trade": trade_rows(trade)}
@@ -311,6 +319,99 @@ class TestCommodityCriticality(YearsCase):
 
         with self.assertRaisesRegex(ValueError, r"non-positive total supply in \[2021\]"):
             irs.commodity_criticality(file, "Afghanistan", "Wheat")
+
+
+class TestExternalRisk(YearsCase):
+    """The HHI of the import suppliers' shares, per year."""
+
+    # Small enough to check by hand: two scored years, two suppliers in the
+    # first and one in the second.
+    YEARS = (2020, 2021)
+
+    FILE = matrix_rows([
+        ("Kazakhstan", "Afghanistan", "Wheat", "Export quantity", "2020", "600"),
+        ("Pakistan",   "Afghanistan", "Wheat", "Export quantity", "2020", "400"),
+        ("Kazakhstan", "Afghanistan", "Wheat", "Export quantity", "2021", "900"),
+        # Distractors:
+        ("India",      "Thailand",    "Wheat", "Export quantity", "2020", "50"),
+        ("India",      "Afghanistan", "Rice",  "Export quantity", "2020", "50"),
+        ("India",      "Afghanistan", "Wheat", "Import quantity", "2020", "50"),
+    ])
+
+    def test_it_is_the_sum_of_squared_supplier_shares(self):
+        risk = irs.external_risk(self.FILE, "Afghanistan", "Wheat")
+
+        self.assertEqual(list(risk.index), [2020, 2021])
+        self.assertAlmostEqual(risk.loc[2020], (600 / 1000) ** 2 + (400 / 1000) ** 2)
+        self.assertEqual(risk.name, "risk_external")
+
+    def test_a_lone_supplier_scores_one(self):
+        # The top of the range: every tonne comes from one place.
+        risk = irs.external_risk(self.FILE, "Afghanistan", "Wheat")
+        self.assertAlmostEqual(risk.loc[2021], (900 / 900) ** 2)
+
+    def test_a_supplier_listed_twice_is_one_supplier(self):
+        # A re-export or a revision can put a country on two rows for a year.
+        # Summed first it is one supplier shipping everything (1.0); read as
+        # two it would look half as concentrated (0.5).
+        file = matrix_rows([
+            ("Kazakhstan", "Afghanistan", "Wheat", "Export quantity", "2020", "500"),
+            ("Kazakhstan", "Afghanistan", "Wheat", "Export quantity", "2020", "500"),
+        ])
+        self.set_years((2020, 2020))
+        self.assertAlmostEqual(irs.external_risk(file, "Afghanistan", "Wheat").loc[2020], 1.0)
+
+    def test_a_year_whose_flows_are_all_zero_reads_as_zero(self):
+        # Nothing to divide out. Without the guard the shares would be 0/0,
+        # and the year would come back NaN rather than 0.
+        file = matrix_rows([
+            ("Kazakhstan", "Afghanistan", "Wheat", "Export quantity", "2020", "0"),
+            ("Pakistan",   "Afghanistan", "Wheat", "Export quantity", "2020", "0"),
+        ])
+        self.set_years((2020, 2020))
+        risk = self.quietly(irs.external_risk, file, "Afghanistan", "Wheat")
+        self.assertEqual(risk.loc[2020], 0.0)
+
+    def test_a_year_with_no_supplier_rows_reads_as_zero(self):
+        # A data blackout reads as the benign end of the scale, and says so.
+        self.set_years((2020, 2022))
+        risk, printed = capture(irs.external_risk, self.FILE, "Afghanistan", "Wheat")
+
+        self.assertEqual(list(risk.index), [2020, 2021, 2022])
+        self.assertEqual(risk.loc[2022], 0.0)
+        self.assertIn("with zero for 2022", printed)
+
+    def test_an_importer_the_matrix_does_not_carry_raises(self):
+        with self.assertRaisesRegex(ValueError, "no supplier rows for Peru / Wheat"):
+            irs.external_risk(self.FILE, "Peru", "Wheat")
+
+    def test_an_unreadable_value_raises(self):
+        # A blank tonnage is missing data; read as 0 it would silently drop a
+        # supplier and make the year look more concentrated than it is.
+        file = matrix_rows([
+            ("Kazakhstan", "Afghanistan", "Wheat", "Export quantity", "2020", "600"),
+            ("Pakistan",   "Afghanistan", "Wheat", "Export quantity", "2020", ""),
+        ])
+        self.set_years((2020, 2020))
+        with self.assertRaisesRegex(ValueError, r"unreadable value\(s\)"):
+            irs.external_risk(file, "Afghanistan", "Wheat")
+
+    def test_an_unreadable_year_raises(self):
+        file = matrix_rows([
+            ("Kazakhstan", "Afghanistan", "Wheat", "Export quantity", "twenty-twenty", "600"),
+        ])
+        self.set_years((2020, 2020))
+        with self.assertRaisesRegex(ValueError, r"unreadable year"):
+            irs.external_risk(file, "Afghanistan", "Wheat")
+
+    def test_missing_columns_raise(self):
+        # The names, not just the shared prefix: this frame has the columns
+        # rows_for_pair wants, so a test on the prefix alone could pass off
+        # that helper's copy of the message.
+        df = pair_rows([("Afghanistan", "Wheat", "Export quantity", "2020", "600")])
+        with self.assertRaisesRegex(
+                ValueError, r"\['Partner Countries', 'Reporter Countries'\]"):
+            irs.external_risk(df, "Afghanistan", "Wheat")
 
 
 if __name__ == "__main__":

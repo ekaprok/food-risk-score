@@ -13,15 +13,19 @@ Builds the internal supply metrics from the FAOSTAT CSVs`:
                                       essential the commodity is to the
                                       national diet, as its share of the
                                       calorie supply
+    Risk_external = sum(si^2)         supplier-concentration risk, per year:
+                                      the Herfindahl-Hirschman index of the
+                                      import suppliers' shares
 
 Which dataset feeds which term:
 
-    | term          | source file              | element                 |
-    |---------------|--------------------------|-------------------------|
-    | P             | `Production_WheatRice`   | Production              |
-    | I, E          | `ImportAndExport_...`    | Import/Export quantity  |
-    | Risk_internal | `Production_WheatRice`   | Production              |
-    | C_kcal        | `Calories_TotalAndWheat` | Food supply (kcal/cap/d)|
+    | term          | source file                | element                 |
+    |---------------|----------------------------|-------------------------|
+    | P             | `Production_WheatRice`     | Production              |
+    | I, E          | `ImportAndExport_...`      | Import/Export quantity  |
+    | Risk_internal | `Production_WheatRice`     | Production              |
+    | C_kcal        | `Calories_TotalAndWheat`   | Food supply (kcal/cap/d)|
+    | Risk_external | `Trade_ReporterAll_...`    | Export quantity         |
 
 A year missing from a source file throws an error, unless MISSING_YEAR_POLICY
 gives that series another reading.
@@ -38,7 +42,7 @@ DATASETS = {
     "production": f"{DATA_DIR}/AfgThai_Production_WheatRice.csv",
     "trade":      f"{DATA_DIR}/AfgThai_ImportAndExport_WheatRice.csv",
     "calories":   f"{DATA_DIR}/AfgThai_Calories_TotalRiceWheat.csv",
-    "trade_matrix_self":   f"{DATA_DIR}/AfgThai_Trade_ReporterAll_WheatRice.csv",
+    "trade_matrix_mirror": f"{DATA_DIR}/AfgThai_Trade_ReporterAll_WheatRice.csv",
 }
 
 COUNTRIES = ("Afghanistan", "Thailand")
@@ -62,6 +66,7 @@ MISSING_YEAR_POLICY = {
     "imports":    FILL_ZERO,
     "exports":    FILL_ZERO,
     "calories":   CARRY_FORWARD,
+    "suppliers":  FILL_ZERO,
 }
 
 ROUND_DECIMALS = 2
@@ -84,6 +89,34 @@ def rows_for_pair(df: pd.DataFrame, country: str, commodity: str) -> pd.DataFram
     if selected.empty:
         raise ValueError(f"no rows for {country} / {commodity}")
     return selected
+
+
+def fill_missing_years(series: pd.Series, dataset: str, element: str,
+                       years: tuple[int, int], policy: str | None,
+                       zero: str | float) -> pd.Series:
+    """`series` with every year of the span present, the absent ones read the
+    way `policy` says. Throws an error if it says nothing. `zero` is what
+    FILL_ZERO writes: a string into a raw string series, a number into a
+    computed one."""
+    start, end = years
+    missing_rows = [y for y in range(start, end + 1) if y not in series.index]
+    if not missing_rows:
+        return series
+    if policy is None:
+        raise ValueError(f"{element}: no row for year(s) {missing_rows}; every year "
+                         f"in {start}-{end} must be present")
+
+    reading = "zero" if policy == FILL_ZERO else "the previous year"
+    print(f"  filled {dataset} / {element} with {reading} for "
+          f"{', '.join(str(year) for year in missing_rows)}")
+    if policy == FILL_ZERO:
+        filled = pd.concat([series, pd.Series(zero, index=missing_rows)])
+    else:
+        filled = series.reindex(series.index.union(missing_rows)).ffill()
+    filled = filled.sort_index()
+    # Concat and reindex both drop the name; put back the one the caller set.
+    filled.name = series.name
+    return filled
 
 
 def validate_and_get_series(df: pd.DataFrame, dataset: str, element: str,
@@ -111,21 +144,9 @@ def validate_and_get_series(df: pd.DataFrame, dataset: str, element: str,
     series = pd.Series(rows["Value"].values, index=index.values,
                        name=element).sort_index()
 
-    start, end = years
-    missing_rows = [y for y in range(start, end + 1) if y not in series.index]
-    if missing_rows and policy is None:
-        raise ValueError(f"{element}: no row for year(s) {missing_rows}; every year "
-                         f"in {start}-{end} must be present")
-    if missing_rows:
-        reading = "zero" if policy == FILL_ZERO else "the previous year"
-        print(f"  filled {dataset} / {element} with {reading} for "
-              f"{', '.join(str(year) for year in missing_rows)}")
-        if policy == FILL_ZERO:
-            series = pd.concat([series, pd.Series("0", index=missing_rows)])
-        else:
-            series = series.reindex(series.index.union(missing_rows)).ffill()
-        series = series.sort_index().rename(element)
+    series = fill_missing_years(series, dataset, element, years, policy, "0")
 
+    start, end = years
     span = pd.to_numeric(series.loc[start:end], errors="coerce")
     unreadable_values = span.index[span.isna()].tolist()
     if unreadable_values:
@@ -183,6 +204,55 @@ def internal_risk(supply_balance: pd.DataFrame) -> pd.Series:
     return coefficient_of_variation.loc[YEARS[0]:YEARS[1]].rename("risk_internal")
 
 
+def external_risk(trade_matrix: pd.DataFrame, country: str,
+                  commodity: str) -> pd.Series:
+    """How concentrated the country's import suppliers are, per year over
+    YEARS: the Herfindahl-Hirschman index of each supplier's share of the
+    flows recorded for that year. 1/n when n suppliers ship equal shares,
+    1.0 when a single supplier ships everything."""
+    supplier, importer = "Reporter Countries", "Partner Countries"
+    element, item = "Export quantity", COMMODITIES[commodity]["cpc"]
+
+    missing_columns = ({supplier, importer, "Element", "Item", "Year", "Value"}
+                       - set(trade_matrix.columns))
+    if missing_columns:
+        raise ValueError(f"expected FAOSTAT column(s) missing: {sorted(missing_columns)}")
+
+    rows = trade_matrix[(trade_matrix[importer] == country)
+                        & (trade_matrix["Item"] == item)
+                        & (trade_matrix["Element"] == element)]
+    if rows.empty:
+        raise ValueError(f"no supplier rows for {country} / {item}")
+
+    year = pd.to_numeric(rows["Year"], errors="coerce")
+    unreadable_years = rows.loc[year.isna(), "Year"].tolist()
+    if unreadable_years:
+        raise ValueError(f"{element}: unreadable year(s) {unreadable_years}")
+
+    flow = pd.to_numeric(rows["Value"], errors="coerce")
+    unreadable_values = rows.loc[flow.isna(), "Value"].tolist()
+    if unreadable_values:
+        raise ValueError(f"{element}: unreadable value(s) {unreadable_values}")
+
+    # Summed per supplier first: a country listed twice in a year (a re-export,
+    # a revision) is one supplier, not two smaller and more diversified ones.
+    by_supplier = (pd.DataFrame({"year": year.astype(int),
+                                 "supplier": rows[supplier],
+                                 "flow": flow})
+                   .groupby(["year", "supplier"])["flow"].sum())
+
+    # A year whose recorded flows add up to nothing has no shares to divide
+    # out; drop it and let MISSING_YEAR_POLICY say what an absent year reads as.
+    yearly_total = by_supplier.groupby(level="year").transform("sum")
+    recorded = yearly_total > 0
+    share = by_supplier[recorded] / yearly_total[recorded]
+    hhi = (share ** 2).groupby(level="year").sum().rename("risk_external")
+
+    hhi = fill_missing_years(hhi, "trade_matrix_mirror", element, YEARS,
+                             MISSING_YEAR_POLICY["suppliers"], 0.0)
+    return hhi.loc[YEARS[0]:YEARS[1]]
+
+
 def commodity_criticality(calories: pd.DataFrame, country: str,
                           commodity: str) -> pd.Series:
     """How essential the commodity is to the nation's diet, per year over
@@ -210,6 +280,7 @@ COLUMN_FORMATS = [
     ("ssr",           "SSR",            "{:>6.2f}"),
     ("idr",           "IDR",            "{:>6.2f}"),
     ("risk_internal", "Risk_internal",  "{:>14.2f}"),
+    ("risk_external", "Risk_external",  "{:>14.2f}"),
     ("criticality",   "Criticality",    "{:>12.2f}"),
 ]
 
@@ -233,10 +304,12 @@ def main() -> pd.DataFrame:
     tables = []
     for country in sorted(COUNTRIES):
         for commodity in sorted(COMMODITIES):
-            print("=" * 96)
+            print("=" * 132)
             print(f"{country.upper()} / {commodity.upper()}  ({YEARS[0]}-{YEARS[1]})")
             print(f"Risk_internal: CV of production over a trailing "
                   f"{RISK_WINDOW}-year window")
+            print("Risk_external: HHI of import-supplier concentration "
+                  "(1/n spread out, 1.0 a single supplier)")
             print("Criticality:   the commodity's share of the national "
                   "calorie supply")
 
@@ -246,6 +319,8 @@ def main() -> pd.DataFrame:
             supply_balance = build_supply_balance(pair)
             scores = ssr_idr_scores(supply_balance)
             scores["risk_internal"] = internal_risk(supply_balance)
+            scores["risk_external"] = external_risk(
+                data["trade_matrix_mirror"], country, commodity)
             scores["criticality"] = commodity_criticality(
                 data["calories"], country, commodity)
             tables.append(scores.assign(country=country, commodity=commodity))
@@ -257,7 +332,7 @@ def main() -> pd.DataFrame:
     table = table[["country", "commodity", "year"]
                   + [key for key, _, _ in COLUMN_FORMATS]]
     table.round(ROUND_DECIMALS).to_csv(OUT_PATH, index=False)
-    print("=" * 96)
+    print("=" * 132)
     print(f"Wrote {len(table)} rows to {OUT_PATH}")
     return table
 

@@ -16,20 +16,15 @@ import pandas as pd
 # Point this at the folder holding the five CSVs (in Colab: "/content/faostat").
 DATA_DIR = "faostat"
 
-# The two trade matrices are the same flows seen from opposite ends:
-#   _self   Afghanistan reports its imports; suppliers sit in `Partner Countries`
-#   _mirror each exporter reports its sales; suppliers sit in `Reporter Countries`
-# Never summed: a flow both ends reported would be counted twice.
 DATASETS = {
     "production":          f"{DATA_DIR}/AfgThai_Production_WheatRice.csv",
     "trade":               f"{DATA_DIR}/AfgThai_ImportAndExport_WheatRice.csv",
     "calories":            f"{DATA_DIR}/AfgThai_Calories_TotalRiceWheat.csv",
-    "trade_matrix_self":   f"{DATA_DIR}/AfgThai_Trade_ReporterAll_WheatRice.csv",
+    "trade_matrix_mirror": f"{DATA_DIR}/AfgThai_Trade_ReporterAll_WheatRice.csv",
 }
 
 # Which column names the supplier, per trade-matrix orientation.
 SUPPLIER_COLUMN = {
-    "trade_matrix_self":   "Partner Countries",
     "trade_matrix_mirror": "Reporter Countries",
 }
 

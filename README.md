@@ -37,7 +37,8 @@ Read-only audit of the five FAOSTAT CSVs.
 python3 internal_risk_score.py
 ```
 
-Calculates SSR, IDR and internal risk. The following parameters can be configured:
+Calculates SSR, IDR, internal risk and external supplier-concentration
+risk (the HHI of the import suppliers' shares). The following parameters can be configured:
 
 - `DATA_DIR`: path to the FAOSTAT CSVs (default: `"faostat"`)
 - `OUT_PATH`: where the output CSV is written (default:
@@ -50,8 +51,10 @@ Calculates SSR, IDR and internal risk. The following parameters can be configure
 - `RISK_WINDOW`: how many years the internal risk (coefficient of variation of
   production) looks back over, including the current year (default: 5).
 - `MISSING_YEAR_POLICY`: how to read a year absent from a source series, one
-  setting per series. `None` raises an error, `FILL_ZERO` reads it as zero, and
-  `CARRY_FORWARD` repeats the previous year.
+  setting per series (`production`, `imports`, `exports`, `calories` and
+  `suppliers`). `None` raises an error, `FILL_ZERO` reads it as zero, and
+  `CARRY_FORWARD` repeats the previous year. A year with no supplier rows in
+  the trade matrix therefore scores an external risk of 0.
 
 ## Tests
 
