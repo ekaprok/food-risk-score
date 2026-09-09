@@ -16,6 +16,10 @@ Builds the internal supply metrics from the FAOSTAT CSVs`:
     Risk_external = sum(si^2)         supplier-concentration risk, per year:
                                       the Herfindahl-Hirschman index of the
                                       import suppliers' shares
+    V             = SSR * Risk_internal + IDR * Risk_external
+                                      vulnerability, per year.
+                                      Built from the terms above, not from a
+                                      source file of its own.
 
 Which dataset feeds which term:
 
@@ -272,6 +276,15 @@ def commodity_criticality(calories: pd.DataFrame, country: str,
     return (calories_from(item) / total).rename("criticality")
 
 
+def vulnerability_score(scores: pd.DataFrame) -> pd.Series:
+    """How exposed the country is on this commodity, per year over YEARS: what
+    it grows for itself weighted by how unsteady its harvests are, plus what it
+    imports weighted by how concentrated its suppliers are. Every term arrives
+    validated from the function that built it, so this only combines them."""
+    return (scores["ssr"] * scores["risk_internal"]
+            + scores["idr"] * scores["risk_external"]).rename("vulnerability")
+
+
 COLUMN_FORMATS = [
     ("production",    "Production (t)", "{:>16,.2f}"),
     ("imports",       "Imports (t)",    "{:>14,.2f}"),
@@ -282,6 +295,7 @@ COLUMN_FORMATS = [
     ("risk_internal", "Risk_internal",  "{:>14.2f}"),
     ("risk_external", "Risk_external",  "{:>14.2f}"),
     ("criticality",   "Criticality",    "{:>12.2f}"),
+    ("vulnerability", "Vulnerability",  "{:>14.2f}"),
 ]
 
 
@@ -312,6 +326,7 @@ def main() -> pd.DataFrame:
                   "(1/n spread out, 1.0 a single supplier)")
             print("Criticality:   the commodity's share of the national "
                   "calorie supply")
+            print("Vulnerability: SSR x Risk_internal + IDR x Risk_external")
 
             pair = {name: rows_for_pair(data[name], country,
                                         COMMODITIES[commodity]["cpc"])
@@ -323,6 +338,7 @@ def main() -> pd.DataFrame:
                 data["trade_matrix_mirror"], country, commodity)
             scores["criticality"] = commodity_criticality(
                 data["calories"], country, commodity)
+            scores["vulnerability"] = vulnerability_score(scores)
             tables.append(scores.assign(country=country, commodity=commodity))
 
             print(render(scores))

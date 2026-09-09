@@ -414,5 +414,24 @@ class TestExternalRisk(YearsCase):
             irs.external_risk(df, "Afghanistan", "Wheat")
 
 
+class TestVulnerabilityScore(unittest.TestCase):
+    """Each half of the supply weighted by the risk it carries. It reads no
+    module constants and no files, so the scores go in by hand."""
+
+    def test_vulnerability_score(self):
+        scores = pd.DataFrame(
+            {"ssr": [0.8, 0.5], "idr": [0.2, 0.5],
+             "risk_internal": [0.1, 0.4], "risk_external": [0.5, 0.6]},
+            index=[2020, 2021], dtype=float)
+
+        score = irs.vulnerability_score(scores)
+
+        self.assertEqual(list(score.index), [2020, 2021])
+        first, second = score.tolist()
+        self.assertAlmostEqual(first, 0.8 * 0.1 + 0.2 * 0.5)
+        self.assertAlmostEqual(second, 0.5 * 0.4 + 0.5 * 0.6)
+        self.assertEqual(score.name, "vulnerability")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
