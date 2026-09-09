@@ -475,5 +475,60 @@ class TestFoodRisk(unittest.TestCase):
         self.assertEqual(score.name, "food_risk")
 
 
+class TestAveragedScores(YearsCase):
+
+    YEARS = (2020, 2021)
+
+    SCORES = pd.DataFrame(
+        {"production": [100.0, 200.0], "imports": [10.0, 30.0],
+         "exports": [1.0, 2.0], "supply": [109.0, 228.0],
+         "ssr": [0.8, 0.4], "idr": [0.2, 0.6],
+         "w_internal": [0.9, 0.5], "w_external": [0.1, 0.5],
+         "risk_internal": [0.2, 0.4], "risk_external": [0.5, 0.9],
+         "criticality": [0.6, 0.2],
+         "vulnerability": [0.23, 0.65], "food_risk": [0.138, 0.13]},
+        index=pd.Index([2020, 2021], name="year"), dtype=float)
+
+    def averaged(self, proportional=True):
+        """The AVERAGES table, built with the weights flag set for the run."""
+        with unittest.mock.patch.object(irs, "USE_PROPORTIONAL_WEIGHTS",
+                                        proportional):
+            return irs.averaged_scores(self.SCORES)
+
+    def test_it_summarises_the_span_in_one_row(self):
+        summary = self.averaged()
+        row = summary.loc["AVERAGES"].to_dict()
+
+        self.assertEqual(list(summary.index), ["AVERAGES"])
+        self.assertEqual(summary.index.name, "year")
+        self.assertEqual(list(summary.columns), list(self.SCORES.columns))
+
+        self.assertAlmostEqual(row["ssr"], 0.6)
+        self.assertAlmostEqual(row["idr"], 0.4)
+        self.assertAlmostEqual(row["w_internal"], 0.7)
+        self.assertAlmostEqual(row["w_external"], 0.3)
+        self.assertAlmostEqual(row["risk_external"], 0.7)
+        self.assertAlmostEqual(row["criticality"], 0.4)
+
+        # The last year's window, not the mean of the two.
+        self.assertAlmostEqual(row["risk_internal"], 0.4)
+
+        for tonnage in ("production", "imports", "exports", "supply"):
+            self.assertTrue(pd.isna(row[tonnage]), tonnage)
+
+        # Built from the averages above, so neither is the mean of the yearly
+        # scores the fixture carries.
+        self.assertAlmostEqual(row["vulnerability"], 0.7 * 0.4 + 0.3 * 0.7)
+        self.assertNotAlmostEqual(row["vulnerability"],
+                                  self.SCORES["vulnerability"].mean())
+        self.assertAlmostEqual(row["food_risk"], (0.7 * 0.4 + 0.3 * 0.7) * 0.4)
+        self.assertNotAlmostEqual(row["food_risk"],
+                                  self.SCORES["food_risk"].mean())
+
+        # And with the flag off, from the averaged SSR and IDR instead.
+        off = self.averaged(proportional=False).loc["AVERAGES"].to_dict()
+        self.assertAlmostEqual(off["vulnerability"], 0.6 * 0.4 + 0.4 * 0.7)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

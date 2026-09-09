@@ -33,6 +33,11 @@ Builds the internal supply metrics from the FAOSTAT CSVs`:
                                       diet leans on the commodity. Built from
                                       the terms above too.
 
+Every table ends in an AVERAGES row covering the whole of YEARS at once: SSR,
+IDR, the two weights, Risk_external and C_kcal averaged over the scored years,
+Risk_internal left as the trailing window ending on the last of them, and V and
+Food_risk built from those figures rather than averaged from the yearly ones.
+
 Which dataset feeds which term:
 
     | term          | source file                | element                 |
@@ -89,7 +94,6 @@ USE_PROPORTIONAL_WEIGHTS = True
 
 ROUND_DECIMALS = 2
 OUT_PATH = "internal_risk_score.csv"
-
 
 def load(path: str) -> pd.DataFrame:
     """The CSV as an all-string frame with surrounding whitespace stripped."""
@@ -316,6 +320,20 @@ def food_risk(scores: pd.DataFrame) -> pd.Series:
     high. Both terms arrive validated, so this only multiplies them."""
     return (scores["vulnerability"] * scores["criticality"]).rename("food_risk")
 
+AVERAGES_LABEL = "AVERAGES"
+AVERAGED_COLUMNS = ["ssr", "idr", "w_internal", "w_external", "risk_external",
+                    "criticality"]
+def averaged_scores(scores: pd.DataFrame) -> pd.DataFrame:
+    """The one-row AVERAGES table summarising the whole of YEARS."""
+    summary = scores[AVERAGED_COLUMNS].mean().to_frame().T
+
+    # reads the `risk_internal` value for the last scored year
+    summary["risk_internal"] = scores["risk_internal"].loc[YEARS[1]]
+    summary["vulnerability"] = vulnerability_score(summary)
+    summary["food_risk"] = food_risk(summary)
+    summary.index = pd.Index([AVERAGES_LABEL], name=scores.index.name)
+    return summary.reindex(columns=scores.columns)
+
 
 COLUMN_FORMATS = [
     ("production",    "Production (t)", "{:>16,.2f}"),
@@ -354,16 +372,43 @@ CSV_COLUMN_NAMES = {
 
 
 def render(df: pd.DataFrame) -> str:
-    """Fixed-width table. Column width comes from the format string itself, so
-    the header and the numbers under it cannot drift apart."""
+    """Fixed-width table."""
     widths = [len(fmt.format(0)) for _, _, fmt in COLUMN_FORMATS]
+    label_width = max([len("Year")] + [len(str(label)) for label in df.index])
     header = "  ".join(
-        ["Year"] + [title.rjust(w) for (_, title, _), w in zip(COLUMN_FORMATS, widths)])
+        ["Year".ljust(label_width)]
+        + [title.rjust(w) for (_, title, _), w in zip(COLUMN_FORMATS, widths)])
     lines = [header, "-" * len(header)]
-    for year, row in df.iterrows():
-        lines.append("  ".join(
-            [str(year)] + [fmt.format(row[key]) for key, _, fmt in COLUMN_FORMATS]))
+    for label, row in df.iterrows():
+        cells = [" " * width if pd.isna(row[key]) else fmt.format(row[key])
+                 for (key, _, fmt), width in zip(COLUMN_FORMATS, widths)]
+        lines.append("  ".join([str(label).ljust(label_width)] + cells))
     return "\n".join(lines)
+
+
+def csv_text(table: pd.DataFrame) -> str:
+    """`table` as CSV text: rounded, the columns named the way the file names
+    them, and a row of empty fields after each AVERAGES row so the
+    country/commodity blocks read apart. Empty fields rather than an empty
+    line, which a spreadsheet and pd.read_csv both skip; the separators come
+    back as all-empty rows, so a reader wanting the scores alone drops them
+    with .dropna(how="all")."""
+    lines = (table.round(ROUND_DECIMALS)
+                  .rename(columns=CSV_COLUMN_NAMES)
+                  .to_csv(index=False)
+                  .splitlines())
+    header, body = lines[0], lines[1:]
+    if len(body) != len(table):
+        raise ValueError(f"{len(table)} rows came back as {len(body)} CSV lines; "
+                         "a value carrying a line break would misplace the breaks")
+
+    separator = "," * (len(table.columns) - 1)
+    separated = []
+    for line, year in zip(body, table["year"]):
+        separated.append(line)
+        if year == AVERAGES_LABEL:
+            separated.append(separator)
+    return "\n".join([header] + separated) + "\n"
 
 
 def main() -> pd.DataFrame:
@@ -382,6 +427,9 @@ def main() -> pd.DataFrame:
                   "calorie supply")
             print(f"Vulnerability: {VULNERABILITY_FORMULA}")
             print("Food_risk:     Vulnerability x Criticality")
+            print(f"{AVERAGES_LABEL}:      the whole span as one row: the ratios "
+                  "and weights averaged over it, Vulnerability and Food_risk "
+                  "built from those")
 
             pair = {name: rows_for_pair(data[name], country,
                                         COMMODITIES[commodity]["cpc"])
@@ -395,6 +443,7 @@ def main() -> pd.DataFrame:
                 data["calories"], country, commodity)
             scores["vulnerability"] = vulnerability_score(scores)
             scores["food_risk"] = food_risk(scores)
+            scores = pd.concat([scores, averaged_scores(scores)])
             tables.append(scores.assign(country=country, commodity=commodity))
 
             print(render(scores))
@@ -403,9 +452,8 @@ def main() -> pd.DataFrame:
     table = pd.concat(tables).reset_index()
     table = table[["country", "commodity", "year"]
                   + [key for key, _, _ in COLUMN_FORMATS]]
-    (table.round(ROUND_DECIMALS)
-          .rename(columns=CSV_COLUMN_NAMES)
-          .to_csv(OUT_PATH, index=False))
+    with open(OUT_PATH, "w", encoding="utf-8", newline="") as out:
+        out.write(csv_text(table))
     print("=" * 132)
     print(f"Wrote {len(table)} rows to {OUT_PATH}")
     return table
