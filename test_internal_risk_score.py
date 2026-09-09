@@ -433,5 +433,23 @@ class TestVulnerabilityScore(unittest.TestCase):
         self.assertEqual(score.name, "vulnerability")
 
 
+class TestFoodRisk(unittest.TestCase):
+    """The vulnerability weighted by how much the diet leans on the commodity.
+    It reads no module constants and no files, so the scores go in by hand."""
+
+    def test_food_risk(self):
+        scores = pd.DataFrame(
+            {"vulnerability": [0.2, 0.5], "criticality": [0.6, 0.1]},
+            index=[2020, 2021], dtype=float)
+
+        score = irs.food_risk(scores)
+
+        self.assertEqual(list(score.index), [2020, 2021])
+        first, second = score.tolist()
+        self.assertAlmostEqual(first, 0.2 * 0.6)
+        self.assertAlmostEqual(second, 0.5 * 0.1)
+        self.assertEqual(score.name, "food_risk")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

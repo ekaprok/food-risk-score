@@ -5,7 +5,8 @@
       "Bash(.venv/bin/python -m ruff check .)",
       "Bash(ruff check *)",
       "Bash(.venv/bin/python internal_risk_score.py)",
-      "Bash(npx --yes pyright test_internal_risk_score.py internal_risk_score.py)"
+      "Bash(npx --yes pyright test_internal_risk_score.py internal_risk_score.py)",
+      "Bash(npx --yes pyright)"
     ]
   }
 }

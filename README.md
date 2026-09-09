@@ -38,9 +38,10 @@ python3 internal_risk_score.py
 ```
 
 Calculates SSR, IDR, internal risk, external supplier-concentration
-risk (the HHI of the import suppliers' shares) and the vulnerability score
-that combines them (`SSR x Risk_internal + IDR x Risk_external`). The
-following parameters can be configured:
+risk (the HHI of the import suppliers' shares), the vulnerability score that
+combines them (`SSR x Risk_internal + IDR x Risk_external`) and the food
+security risk (`Vulnerability x Criticality`). The following parameters can be
+configured:
 
 - `DATA_DIR`: path to the FAOSTAT CSVs (default: `"faostat"`)
 - `OUT_PATH`: where the output CSV is written (default:

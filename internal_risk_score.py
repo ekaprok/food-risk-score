@@ -20,6 +20,10 @@ Builds the internal supply metrics from the FAOSTAT CSVs`:
                                       vulnerability, per year.
                                       Built from the terms above, not from a
                                       source file of its own.
+    Food_risk     = V * C_kcal        food security risk, per year: the
+                                      vulnerability weighted by how much the
+                                      diet leans on the commodity. Built from
+                                      the terms above too.
 
 Which dataset feeds which term:
 
@@ -285,6 +289,14 @@ def vulnerability_score(scores: pd.DataFrame) -> pd.Series:
             + scores["idr"] * scores["risk_external"]).rename("vulnerability")
 
 
+def food_risk(scores: pd.DataFrame) -> pd.Series:
+    """The food security risk, per year over YEARS: the vulnerability weighted
+    by how much of the national diet rides on the commodity. A shaky supply of
+    something barely eaten scores low; the same shakiness in a staple scores
+    high. Both terms arrive validated, so this only multiplies them."""
+    return (scores["vulnerability"] * scores["criticality"]).rename("food_risk")
+
+
 COLUMN_FORMATS = [
     ("production",    "Production (t)", "{:>16,.2f}"),
     ("imports",       "Imports (t)",    "{:>14,.2f}"),
@@ -296,7 +308,26 @@ COLUMN_FORMATS = [
     ("risk_external", "Risk_external",  "{:>14.2f}"),
     ("criticality",   "Criticality",    "{:>12.2f}"),
     ("vulnerability", "Vulnerability",  "{:>14.2f}"),
+    ("food_risk",     "Food_risk",      "{:>10.2f}"),
 ]
+
+
+# What each score column is called in the output CSV: the term, then the
+# abbreviation or formula it stands for. Only the CSV uses these; the rendered
+# table keeps the short titles in COLUMN_FORMATS so its columns stay narrow.
+CSV_COLUMN_NAMES = {
+    "production":    "production (P)",
+    "imports":       "imports (I)",
+    "exports":       "exports (E)",
+    "supply":        "supply (P + I - E)",
+    "ssr":           "ssr (P / Supply)",
+    "idr":           "idr (I / Supply)",
+    "risk_internal": "risk_internal (std(P) / mean(P))",
+    "risk_external": "risk_external (sum(si^2))",
+    "criticality":   "criticality (Kcal_commodity / Kcal_total)",
+    "vulnerability": "vulnerability (SSR x Risk_internal + IDR x Risk_external)",
+    "food_risk":     "food_risk (Vulnerability x Criticality)",
+}
 
 
 def render(df: pd.DataFrame) -> str:
@@ -327,6 +358,7 @@ def main() -> pd.DataFrame:
             print("Criticality:   the commodity's share of the national "
                   "calorie supply")
             print("Vulnerability: SSR x Risk_internal + IDR x Risk_external")
+            print("Food_risk:     Vulnerability x Criticality")
 
             pair = {name: rows_for_pair(data[name], country,
                                         COMMODITIES[commodity]["cpc"])
@@ -339,6 +371,7 @@ def main() -> pd.DataFrame:
             scores["criticality"] = commodity_criticality(
                 data["calories"], country, commodity)
             scores["vulnerability"] = vulnerability_score(scores)
+            scores["food_risk"] = food_risk(scores)
             tables.append(scores.assign(country=country, commodity=commodity))
 
             print(render(scores))
@@ -347,7 +380,9 @@ def main() -> pd.DataFrame:
     table = pd.concat(tables).reset_index()
     table = table[["country", "commodity", "year"]
                   + [key for key, _, _ in COLUMN_FORMATS]]
-    table.round(ROUND_DECIMALS).to_csv(OUT_PATH, index=False)
+    (table.round(ROUND_DECIMALS)
+          .rename(columns=CSV_COLUMN_NAMES)
+          .to_csv(OUT_PATH, index=False))
     print("=" * 132)
     print(f"Wrote {len(table)} rows to {OUT_PATH}")
     return table
