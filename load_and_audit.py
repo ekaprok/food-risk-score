@@ -23,8 +23,8 @@ DATA_DIR = "faostat"
 DATASETS = {
     "production":          f"{DATA_DIR}/AfgThai_Production_WheatRice.csv",
     "trade":               f"{DATA_DIR}/AfgThai_ImportAndExport_WheatRice.csv",
-    "calories":            f"{DATA_DIR}/Afganistan_Calories_TotalAndWheat.csv",
-    "trade_matrix_self":   f"{DATA_DIR}/Afganistan_Trade_ReporterAll_Wheat.csv",
+    "calories":            f"{DATA_DIR}/AfgThai_Calories_TotalRiceWheat.csv",
+    "trade_matrix_self":   f"{DATA_DIR}/AfgThai_Trade_ReporterAll_WheatRice.csv",
 }
 
 # Which column names the supplier, per trade-matrix orientation.
