@@ -1,6 +1,6 @@
-"""Unit tests for the helpers in internal_risk_score.py.
+"""Unit tests for the helpers in food_score.py.
 
-Run with:  python3 -m unittest test_internal_risk_score -v
+Run with:  python3 -m unittest test_food_score -v
 
 Each test doubles as documentation: read the asserts to see what the helper
 does. The script does no work at import time (everything runs under main()),
@@ -14,7 +14,7 @@ import unittest.mock
 
 import pandas as pd
 
-import internal_risk_score as irs
+import food_score
 
 
 def trade_rows(rows):
@@ -78,15 +78,15 @@ class YearsCase(unittest.TestCase):
     RISK_WINDOW = 5
 
     def setUp(self):
-        self._saved = (irs.YEARS, irs.RISK_WINDOW)
-        irs.RISK_WINDOW = self.RISK_WINDOW
+        self._saved = (food_score.YEARS, food_score.RISK_WINDOW)
+        food_score.RISK_WINDOW = self.RISK_WINDOW
         self.set_years(self.YEARS)
 
     def tearDown(self):
-        irs.YEARS, irs.RISK_WINDOW = self._saved
+        food_score.YEARS, food_score.RISK_WINDOW = self._saved
 
     def set_years(self, years):
-        irs.YEARS = years
+        food_score.YEARS = years
 
     def quietly(self, function, *args):
         """The call's result, with the fills it reports kept out of the run."""
@@ -95,7 +95,7 @@ class YearsCase(unittest.TestCase):
     @property
     def production_years(self):
         """The wider span production covers, for the first risk window."""
-        return (irs.YEARS[0] - irs.RISK_WINDOW + 1, irs.YEARS[1])
+        return (food_score.YEARS[0] - food_score.RISK_WINDOW + 1, food_score.YEARS[1])
 
 
 class TestRowsForPair(unittest.TestCase):
@@ -111,19 +111,19 @@ class TestRowsForPair(unittest.TestCase):
     def test_it_keeps_one_pair(self):
         # Both halves of the filter matter: three of these four rows share a
         # country or a commodity with the one wanted.
-        selected = irs.rows_for_pair(self.FILE, "Afghanistan", "Wheat")
+        selected = food_score.rows_for_pair(self.FILE, "Afghanistan", "Wheat")
         self.assertEqual(list(selected["Value"]), ["80"])
 
     def test_a_pair_the_file_does_not_carry_raises(self):
         # Otherwise it surfaces later as "no row for year(s) [2019, ...]",
         # which reads as a gap in the data rather than a missing country.
         with self.assertRaisesRegex(ValueError, "no rows for Peru / Wheat"):
-            irs.rows_for_pair(self.FILE, "Peru", "Wheat")
+            food_score.rows_for_pair(self.FILE, "Peru", "Wheat")
 
     def test_missing_columns_raise(self):
         df = trade_rows([("Production", "2020", "100")])
         with self.assertRaisesRegex(ValueError, r"\['Area', 'Item'\]"):
-            irs.rows_for_pair(df, "Afghanistan", "Wheat")
+            food_score.rows_for_pair(df, "Afghanistan", "Wheat")
 
 
 class TestValidateAndGetSeries(unittest.TestCase):
@@ -137,7 +137,7 @@ class TestValidateAndGetSeries(unittest.TestCase):
             ("Export quantity", "2020", "20.68"),
             ("Import quantity", "2020", "598254.11"),
         ])
-        result = irs.validate_and_get_series(df, "trade", "Import quantity", (2019, 2020))
+        result = food_score.validate_and_get_series(df, "trade", "Import quantity", (2019, 2020))
         self.assertEqual(list(result.index), [2019, 2020])
         self.assertEqual(list(result.values), [457458.88, 598254.11])
 
@@ -145,19 +145,19 @@ class TestValidateAndGetSeries(unittest.TestCase):
         # internal_risk rolls over this series by position, so order matters.
         df = trade_rows([("Production", y, "100") for y in ("2011", "2009", "2010")])
         self.assertEqual(
-            list(irs.validate_and_get_series(df, "production", "Production", (2009, 2011)).index),
+            list(food_score.validate_and_get_series(df, "production", "Production", (2009, 2011)).index),
             [2009, 2010, 2011])
 
     def test_years_outside_the_span_are_left_out(self):
         df = trade_rows(rows_for("Production", (2018, 2020)))
         self.assertEqual(
-            list(irs.validate_and_get_series(df, "production", "Production", (2019, 2020)).index),
+            list(food_score.validate_and_get_series(df, "production", "Production", (2019, 2020)).index),
             [2019, 2020])
 
     def test_a_year_with_no_row_raises(self):
         df = trade_rows([("Export quantity", y, "100") for y in ("2019", "2021")])
         with self.assertRaisesRegex(ValueError, r"no row for year\(s\) \[2020\]"):
-            irs.validate_and_get_series(df, "trade", "Export quantity", (2019, 2021))
+            food_score.validate_and_get_series(df, "trade", "Export quantity", (2019, 2021))
 
     def test_an_unreadable_value_raises(self):
         # A blank harvest figure is missing data. Turning it into 0 would read
@@ -167,24 +167,24 @@ class TestValidateAndGetSeries(unittest.TestCase):
             ("Production", "2020", ""),
         ])
         with self.assertRaisesRegex(ValueError, r"unreadable value\(s\) for year\(s\) \[2020\]"):
-            irs.validate_and_get_series(df, "production", "Production", (2019, 2020))
+            food_score.validate_and_get_series(df, "production", "Production", (2019, 2020))
 
     def test_an_unreadable_year_raises(self):
         df = trade_rows([("Production", "twenty-twenty", "100")])
         with self.assertRaisesRegex(ValueError, "unreadable year"):
-            irs.validate_and_get_series(df, "production", "Production", (2020, 2020))
+            food_score.validate_and_get_series(df, "production", "Production", (2020, 2020))
 
     def test_fill_zero_reads_an_absent_year_as_zero(self):
         df = trade_rows([("Export quantity", "2019", "5")])
-        result, _printed = capture(irs.validate_and_get_series, df, "trade", "Export quantity",
-                                   (2019, 2021), irs.FILL_ZERO)
+        result, _printed = capture(food_score.validate_and_get_series, df, "trade", "Export quantity",
+                                   (2019, 2021), food_score.FILL_ZERO)
         self.assertEqual(list(result.index), [2019, 2020, 2021])
         self.assertEqual(list(result.values), [5.0, 0.0, 0.0])
 
     def test_carry_forward_repeats_the_last_year_on_file(self):
         df = trade_rows([("Production", "2019", "5"), ("Production", "2020", "7")])
-        result, printed = capture(irs.validate_and_get_series, df, "calories",
-                                  "Production", (2019, 2022), irs.CARRY_FORWARD)
+        result, printed = capture(food_score.validate_and_get_series, df, "calories",
+                                  "Production", (2019, 2022), food_score.CARRY_FORWARD)
         self.assertEqual(list(result.index), [2019, 2020, 2021, 2022])
         self.assertEqual(list(result.values), [5.0, 7.0, 7.0, 7.0])
         self.assertIn("2021, 2022", printed)
@@ -194,13 +194,13 @@ class TestValidateAndGetSeries(unittest.TestCase):
         df = trade_rows([("Production", "2020", "5")])
         with self.assertRaisesRegex(ValueError, r"unreadable value\(s\) for year\(s\) \[2019\]"), \
                 contextlib.redirect_stdout(io.StringIO()):
-            irs.validate_and_get_series(df, "calories", "Production",
-                                        (2019, 2020), irs.CARRY_FORWARD)
+            food_score.validate_and_get_series(df, "calories", "Production",
+                                        (2019, 2020), food_score.CARRY_FORWARD)
 
     def test_missing_columns_raise(self):
         df = pd.DataFrame({"Year": ["2020"], "Value": ["100"]})
         with self.assertRaises(ValueError):
-            irs.validate_and_get_series(df, "production", "Production", (2020, 2020))
+            food_score.validate_and_get_series(df, "production", "Production", (2020, 2020))
 
     def test_a_repeated_year_raises(self):
         # The year becomes the index, so two rows for 2020 would double the
@@ -211,7 +211,7 @@ class TestValidateAndGetSeries(unittest.TestCase):
             ("Production", "2020", "150"),
         ])
         with self.assertRaisesRegex(ValueError, "repeated year"):
-            irs.validate_and_get_series(df, "production", "Production", (2020, 2020))
+            food_score.validate_and_get_series(df, "production", "Production", (2020, 2020))
 
 
 class TestSupplyRatios(YearsCase):
@@ -224,13 +224,13 @@ class TestSupplyRatios(YearsCase):
 
     def test_ssr(self):
         # Supply is production + imports - exports, per year.
-        scores = irs.supply_ratios(self.BALANCE)
+        scores = food_score.supply_ratios(self.BALANCE)
         self.assertEqual(list(scores.index), [2023, 2024])
         self.assertEqual(scores.at[2023, "ssr"], 80 / (80 + 40 - 20))
         self.assertEqual(scores.at[2024, "ssr"], 60 / (60 + 30 - 10))
 
     def test_idr(self):
-        scores = irs.supply_ratios(self.BALANCE)
+        scores = food_score.supply_ratios(self.BALANCE)
         self.assertEqual(scores.at[2023, "idr"], 40 / (80 + 40 - 20))
         self.assertEqual(scores.at[2024, "idr"], 30 / (60 + 30 - 10))
         self.assertEqual(list(scores.columns),
@@ -238,7 +238,7 @@ class TestSupplyRatios(YearsCase):
                           "w_internal", "w_external"])
 
     def test_the_weights_split_the_inflows(self):
-        scores = irs.supply_ratios(self.BALANCE)
+        scores = food_score.supply_ratios(self.BALANCE)
         self.assertEqual(scores.at[2023, "w_internal"], 80 / (80 + 40))
         self.assertEqual(scores.at[2023, "w_external"], 40 / (80 + 40))
         self.assertEqual(scores.at[2024, "w_internal"], 60 / (60 + 30))
@@ -251,12 +251,12 @@ class TestSupplyRatios(YearsCase):
         # 0%-dependency country. A negative SSR should never reach the table.
         self.set_years((2020, 2020))
         with self.assertRaisesRegex(ValueError, "non-positive apparent supply"):
-            irs.supply_ratios(balance([10], [0], [50]))
+            food_score.supply_ratios(balance([10], [0], [50]))
 
     def test_a_broken_year_outside_years_is_not_scored(self):
         self.set_years((2021, 2021))
         # supply for 2020 = 10 - 50 = -40. Error but we ignore it as it is outside our window.
-        scores = irs.supply_ratios(balance(production=[10, 100], imports=[0, 0], exports=[50, 0], start=2020))
+        scores = food_score.supply_ratios(balance(production=[10, 100], imports=[0, 0], exports=[50, 0], start=2020))
         self.assertEqual(list(scores.index), [2021])
 
 
@@ -268,7 +268,7 @@ class TestInternalRisk(YearsCase):
     RISK_WINDOW = 2
 
     def test_it_is_the_cv_of_each_trailing_window(self):
-        risk = irs.internal_risk(balance(production=[9000, 100, 300, 300],
+        risk = food_score.internal_risk(balance(production=[9000, 100, 300, 300],
                                          imports=[0, 5000, 0, 5000],
                                          exports=[7000, 0, 3000, 0],
                                          start=2021))
@@ -282,53 +282,6 @@ class TestInternalRisk(YearsCase):
         self.assertAlmostEqual(risk.at[2023], std_2023 / mean_2023)
         self.assertEqual(risk.at[2024], std_2024 / mean_2024)
         self.assertEqual(risk.name, "risk_internal")
-
-
-KCAL = "Food supply (kcal/capita/day)"
-
-
-class TestCommodityCriticality(YearsCase):
-    """The commodity's share of the national calorie supply, per year."""
-
-    # Small enough to check by hand: two scored years, both on file.
-    YEARS = (2020, 2021)
-
-    FILE = pair_rows([
-        ("Afghanistan", "Grand Total",        KCAL, "2020", "2000"),
-        ("Afghanistan", "Grand Total",        KCAL, "2021", "2500"),
-        ("Afghanistan", "Wheat and products", KCAL, "2020", "1000"),
-        ("Afghanistan", "Wheat and products", KCAL, "2021", "500"),
-    ])
-
-    def test_commodity_criticality(self):
-        score = self.quietly(irs.commodity_criticality, self.FILE,
-                             "Afghanistan", "Wheat")
-
-        self.assertEqual(list(score.index), [2020, 2021])
-        self.assertAlmostEqual(score.at[2020], 1000 / 2000)
-        self.assertAlmostEqual(score.at[2021], 500 / 2500)
-        self.assertEqual(score.name, "criticality")
-
-    def test_commodity_criticality_carry_forward(self):
-        self.set_years((2020, 2022))
-
-        score, printed = capture(irs.commodity_criticality, self.FILE,
-                                 "Afghanistan", "Wheat")
-
-        self.assertEqual(list(score.index), [2020, 2021, 2022])
-        self.assertAlmostEqual(float(score.loc[2022]), 500 / 2500)
-        self.assertIn("2022", printed)
-
-    def test_a_non_positive_total_raises(self):
-        file = pair_rows([
-            ("Afghanistan", "Grand Total",        KCAL, "2020", "2000"),
-            ("Afghanistan", "Grand Total",        KCAL, "2021", "0"),
-            ("Afghanistan", "Wheat and products", KCAL, "2020", "1000"),
-            ("Afghanistan", "Wheat and products", KCAL, "2021", "500"),
-        ])
-
-        with self.assertRaisesRegex(ValueError, r"non-positive total supply in \[2021\]"):
-            irs.commodity_criticality(file, "Afghanistan", "Wheat")
 
 
 class TestExternalRisk(YearsCase):
@@ -349,7 +302,7 @@ class TestExternalRisk(YearsCase):
     ])
 
     def test_it_is_the_sum_of_squared_supplier_shares(self):
-        risk = irs.external_risk(self.FILE, "Afghanistan", "Wheat")
+        risk = food_score.external_risk(self.FILE, "Afghanistan", "Wheat")
 
         self.assertEqual(list(risk.index), [2020, 2021])
         self.assertAlmostEqual(risk.loc[2020], (600 / 1000) ** 2 + (400 / 1000) ** 2)
@@ -357,7 +310,7 @@ class TestExternalRisk(YearsCase):
 
     def test_a_lone_supplier_scores_one(self):
         # The top of the range: every tonne comes from one place.
-        risk = irs.external_risk(self.FILE, "Afghanistan", "Wheat")
+        risk = food_score.external_risk(self.FILE, "Afghanistan", "Wheat")
         self.assertAlmostEqual(risk.loc[2021], (900 / 900) ** 2)
 
     def test_a_supplier_listed_twice_is_one_supplier(self):
@@ -369,7 +322,7 @@ class TestExternalRisk(YearsCase):
             ("Kazakhstan", "Afghanistan", "Wheat", "Export quantity", "2020", "500"),
         ])
         self.set_years((2020, 2020))
-        self.assertAlmostEqual(irs.external_risk(file, "Afghanistan", "Wheat").loc[2020], 1.0)
+        self.assertAlmostEqual(food_score.external_risk(file, "Afghanistan", "Wheat").loc[2020], 1.0)
 
     def test_a_year_whose_flows_are_all_zero_reads_as_zero(self):
         # Nothing to divide out. Without the guard the shares would be 0/0,
@@ -379,13 +332,13 @@ class TestExternalRisk(YearsCase):
             ("Pakistan",   "Afghanistan", "Wheat", "Export quantity", "2020", "0"),
         ])
         self.set_years((2020, 2020))
-        risk = self.quietly(irs.external_risk, file, "Afghanistan", "Wheat")
+        risk = self.quietly(food_score.external_risk, file, "Afghanistan", "Wheat")
         self.assertEqual(risk.loc[2020], 0.0)
 
     def test_a_year_with_no_supplier_rows_reads_as_zero(self):
         # A data blackout reads as the benign end of the scale, and says so.
         self.set_years((2020, 2022))
-        risk, printed = capture(irs.external_risk, self.FILE, "Afghanistan", "Wheat")
+        risk, printed = capture(food_score.external_risk, self.FILE, "Afghanistan", "Wheat")
 
         self.assertEqual(list(risk.index), [2020, 2021, 2022])
         self.assertEqual(risk.loc[2022], 0.0)
@@ -393,7 +346,7 @@ class TestExternalRisk(YearsCase):
 
     def test_an_importer_the_matrix_does_not_carry_raises(self):
         with self.assertRaisesRegex(ValueError, "no supplier rows for Peru / Wheat"):
-            irs.external_risk(self.FILE, "Peru", "Wheat")
+            food_score.external_risk(self.FILE, "Peru", "Wheat")
 
     def test_an_unreadable_value_raises(self):
         # A blank tonnage is missing data; read as 0 it would silently drop a
@@ -404,7 +357,7 @@ class TestExternalRisk(YearsCase):
         ])
         self.set_years((2020, 2020))
         with self.assertRaisesRegex(ValueError, r"unreadable value\(s\)"):
-            irs.external_risk(file, "Afghanistan", "Wheat")
+            food_score.external_risk(file, "Afghanistan", "Wheat")
 
     def test_an_unreadable_year_raises(self):
         file = matrix_rows([
@@ -412,7 +365,7 @@ class TestExternalRisk(YearsCase):
         ])
         self.set_years((2020, 2020))
         with self.assertRaisesRegex(ValueError, r"unreadable year"):
-            irs.external_risk(file, "Afghanistan", "Wheat")
+            food_score.external_risk(file, "Afghanistan", "Wheat")
 
     def test_missing_columns_raise(self):
         # The names, not just the shared prefix: this frame has the columns
@@ -421,7 +374,7 @@ class TestExternalRisk(YearsCase):
         df = pair_rows([("Afghanistan", "Wheat", "Export quantity", "2020", "600")])
         with self.assertRaisesRegex(
                 ValueError, r"\['Partner Countries', 'Reporter Countries'\]"):
-            irs.external_risk(df, "Afghanistan", "Wheat")
+            food_score.external_risk(df, "Afghanistan", "Wheat")
 
 
 class TestVulnerabilityScore(unittest.TestCase):
@@ -437,8 +390,8 @@ class TestVulnerabilityScore(unittest.TestCase):
         index=[2020, 2021], dtype=float)
 
     def test_proportional_weights_on_uses_w_internal_and_w_external(self):
-        with unittest.mock.patch.object(irs, "USE_PROPORTIONAL_WEIGHTS", True):
-            score = irs.vulnerability_score(self.SCORES)
+        with unittest.mock.patch.object(food_score, "USE_PROPORTIONAL_WEIGHTS", True):
+            score = food_score.vulnerability_score(self.SCORES)
 
         self.assertEqual(list(score.index), [2020, 2021])
         first, second = score.tolist()
@@ -447,8 +400,8 @@ class TestVulnerabilityScore(unittest.TestCase):
         self.assertEqual(score.name, "vulnerability")
 
     def test_proportional_weights_off_uses_ssr_and_idr(self):
-        with unittest.mock.patch.object(irs, "USE_PROPORTIONAL_WEIGHTS", False):
-            score = irs.vulnerability_score(self.SCORES)
+        with unittest.mock.patch.object(food_score, "USE_PROPORTIONAL_WEIGHTS", False):
+            score = food_score.vulnerability_score(self.SCORES)
 
         self.assertEqual(list(score.index), [2020, 2021])
         first, second = score.tolist()
@@ -456,6 +409,50 @@ class TestVulnerabilityScore(unittest.TestCase):
         self.assertAlmostEqual(second, 0.5 * 0.4 + 0.5 * 0.6)
         self.assertEqual(score.name, "vulnerability")
 
+KCAL = "Food supply (kcal/capita/day)"
+
+class TestCommodityCriticality(YearsCase):
+    """The commodity's share of the national calorie supply, per year."""
+
+    # Small enough to check by hand: two scored years, both on file.
+    YEARS = (2020, 2021)
+
+    FILE = pair_rows([
+        ("Afghanistan", "Grand Total",        KCAL, "2020", "2000"),
+        ("Afghanistan", "Grand Total",        KCAL, "2021", "2500"),
+        ("Afghanistan", "Wheat and products", KCAL, "2020", "1000"),
+        ("Afghanistan", "Wheat and products", KCAL, "2021", "500"),
+    ])
+
+    def test_commodity_criticality(self):
+        score = self.quietly(food_score.commodity_criticality, self.FILE,
+                             "Afghanistan", "Wheat")
+
+        self.assertEqual(list(score.index), [2020, 2021])
+        self.assertAlmostEqual(score.at[2020], 1000 / 2000)
+        self.assertAlmostEqual(score.at[2021], 500 / 2500)
+        self.assertEqual(score.name, "criticality")
+
+    def test_commodity_criticality_carry_forward(self):
+        self.set_years((2020, 2022))
+
+        score, printed = capture(food_score.commodity_criticality, self.FILE,
+                                 "Afghanistan", "Wheat")
+
+        self.assertEqual(list(score.index), [2020, 2021, 2022])
+        self.assertAlmostEqual(float(score.loc[2022]), 500 / 2500)
+        self.assertIn("2022", printed)
+
+    def test_a_non_positive_total_raises(self):
+        file = pair_rows([
+            ("Afghanistan", "Grand Total",        KCAL, "2020", "2000"),
+            ("Afghanistan", "Grand Total",        KCAL, "2021", "0"),
+            ("Afghanistan", "Wheat and products", KCAL, "2020", "1000"),
+            ("Afghanistan", "Wheat and products", KCAL, "2021", "500"),
+        ])
+
+        with self.assertRaisesRegex(ValueError, r"non-positive total supply in \[2021\]"):
+            food_score.commodity_criticality(file, "Afghanistan", "Wheat")
 
 class TestFoodRisk(unittest.TestCase):
     """The vulnerability weighted by how much the diet leans on the commodity.
@@ -466,7 +463,7 @@ class TestFoodRisk(unittest.TestCase):
             {"vulnerability": [0.2, 0.5], "criticality": [0.6, 0.1]},
             index=[2020, 2021], dtype=float)
 
-        score = irs.food_risk(scores)
+        score = food_score.food_risk(scores)
 
         self.assertEqual(list(score.index), [2020, 2021])
         first, second = score.tolist()
@@ -491,9 +488,9 @@ class TestAveragedScores(YearsCase):
 
     def averaged(self, proportional=True):
         """The AVERAGES table, built with the weights flag set for the run."""
-        with unittest.mock.patch.object(irs, "USE_PROPORTIONAL_WEIGHTS",
+        with unittest.mock.patch.object(food_score, "USE_PROPORTIONAL_WEIGHTS",
                                         proportional):
-            return irs.averaged_scores(self.SCORES)
+            return food_score.averaged_scores(self.SCORES)
 
     def test_it_summarises_the_span_in_one_row(self):
         summary = self.averaged()

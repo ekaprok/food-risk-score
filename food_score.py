@@ -1,55 +1,7 @@
 """SSR, IDR and internal supply risk.
 
-Builds the internal supply metrics from the FAOSTAT CSVs`:
-
-    Supply        = P + I - E         apparent domestic supply, per year
-    SSR           = P / Supply        self-sufficiency ratio, per year
-    IDR           = I / Supply        import dependency ratio, per year
-    W_internal    = P / (P + I)       the share of the inflows the country
-                                      grew itself, per year
-    W_external    = I / (P + I)       and the share it bought in. Taken over
-                                      the inflows rather than over apparent
-                                      supply, so the two sum to 1 whatever the
-                                      country exports
-    Risk_internal = std(P) / mean(P)  coefficient of variation of production
-                                      over the trailing RISK_WINDOW years,
-                                      one figure per year
-    C_kcal        = Kcal_commodity / Kcal_total
-                                      commodity criticality, per year: how
-                                      essential the commodity is to the
-                                      national diet, as its share of the
-                                      calorie supply
-    Risk_external = sum(si^2)         supplier-concentration risk, per year:
-                                      the Herfindahl-Hirschman index of the
-                                      import suppliers' shares
-    V             = W_internal * Risk_internal + W_external * Risk_external
-                                      vulnerability, per year, when
-                                      USE_PROPORTIONAL_WEIGHTS is on;
-                                      SSR * Risk_internal + IDR * Risk_external
-                                      when it is off. Built from the terms
-                                      above, not from a source file of its own.
-    Food_risk     = V * C_kcal        food security risk, per year: the
-                                      vulnerability weighted by how much the
-                                      diet leans on the commodity. Built from
-                                      the terms above too.
-
-Every table ends in an AVERAGES row covering the whole of YEARS at once: SSR,
-IDR, the two weights, Risk_external and C_kcal averaged over the scored years,
-Risk_internal left as the trailing window ending on the last of them, and V and
-Food_risk built from those figures rather than averaged from the yearly ones.
-
-Which dataset feeds which term:
-
-    | term          | source file                | element                 |
-    |---------------|----------------------------|-------------------------|
-    | P             | `Production_WheatRice`     | Production              |
-    | I, E          | `ImportAndExport_...`      | Import/Export quantity  |
-    | Risk_internal | `Production_WheatRice`     | Production              |
-    | C_kcal        | `Calories_TotalAndWheat`   | Food supply (kcal/cap/d)|
-    | Risk_external | `Trade_ReporterAll_...`    | Export quantity         |
-
-A year missing from a source file throws an error, unless MISSING_YEAR_POLICY
-gives that series another reading.
+Builds the internal supply metrics from the FAOSTAT CSVs. README.md
+"`food_score.py`" explains every term and output column.
 """
 
 from __future__ import annotations
@@ -93,7 +45,7 @@ MISSING_YEAR_POLICY = {
 USE_PROPORTIONAL_WEIGHTS = True
 
 ROUND_DECIMALS = 2
-OUT_PATH = "internal_risk_score.csv"
+OUT_PATH = "food_score.csv"
 
 def load(path: str) -> pd.DataFrame:
     """The CSV as an all-string frame with surrounding whitespace stripped."""
@@ -280,6 +232,17 @@ def external_risk(trade_matrix: pd.DataFrame, country: str,
                              MISSING_YEAR_POLICY["suppliers"], 0.0)
     return hhi.loc[YEARS[0]:YEARS[1]]
 
+def vulnerability_score(scores: pd.DataFrame) -> pd.Series:
+    """How exposed the country is on this commodity, per year over YEARS. The
+    two shares are W_internal and W_external when USE_PROPORTIONAL_WEIGHTS is
+    on and SSR and IDR when it is off. Every term arrives validated from the
+    function that built it, so this only combines them."""
+    if USE_PROPORTIONAL_WEIGHTS:
+        internal, external = scores["w_internal"], scores["w_external"]
+    else:
+        internal, external = scores["ssr"], scores["idr"]
+    return (internal * scores["risk_internal"]
+            + external * scores["risk_external"]).rename("vulnerability")
 
 def commodity_criticality(calories: pd.DataFrame, country: str,
                           commodity: str) -> pd.Series:
@@ -298,19 +261,6 @@ def commodity_criticality(calories: pd.DataFrame, country: str,
     if bad_total:
         raise ValueError(f"{element}: non-positive total supply in {bad_total}")
     return (calories_from(item) / total).rename("criticality")
-
-
-def vulnerability_score(scores: pd.DataFrame) -> pd.Series:
-    """How exposed the country is on this commodity, per year over YEARS. The
-    two shares are W_internal and W_external when USE_PROPORTIONAL_WEIGHTS is
-    on and SSR and IDR when it is off. Every term arrives validated from the
-    function that built it, so this only combines them."""
-    if USE_PROPORTIONAL_WEIGHTS:
-        internal, external = scores["w_internal"], scores["w_external"]
-    else:
-        internal, external = scores["ssr"], scores["idr"]
-    return (internal * scores["risk_internal"]
-            + external * scores["risk_external"]).rename("vulnerability")
 
 
 def food_risk(scores: pd.DataFrame) -> pd.Series:
