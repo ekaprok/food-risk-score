@@ -58,8 +58,10 @@ plus an AVERAGES row and a blank separator line after each block.
 | `risk_internal (std(P) / mean(P))` | How unsteady the harvest has been over the last `RISK_WINDOW` years. 0 means production never moves; the bigger the number, the more it swings from year to year. | Not averaged: the last scored year's value is carried down as-is, because it already looks back over the trailing `RISK_WINDOW` years. |
 | `risk_external (sum(si^2))` | How concentrated the country's suppliers are, as a Herfindahl-Hirschman index. Near 0 means imports are spread over many countries; 1.0 means a single supplier provides everything, so losing it would cut the whole flow. | The plain average of the yearly values over `YEARS`. |
 | `criticality (Kcal_commodity / Kcal_total)` | How much the national diet relies on the crop. | The plain average of the yearly values over `YEARS`. |
-| `vulnerability (<formula>)` | If `USE_PROPORTIONAL_WEIGHTS` is set to True, `W_internal x Risk_internal + W_external x Risk_external`. Otherwise, `SSR x Risk_internal + IDR x Risk_external`. | Recalculated from the averaged figures in this row, not averaged from the yearly vulnerabilities. |
-| `food_risk (Vulnerability x Criticality)` | The headline figure: vulnerability scaled by how much the diet depends on the crop. | Recalculated too, as this row's vulnerability times this row's criticality. |
+| `vulnerability_weighted (W_internal x Risk_internal + W_external x Risk_external)` | How exposed the country is, splitting the score over the inflows (`P + I`), so the weights sum to 1 whatever it exports. | Recalculated from the averaged figures in this row, not averaged from the yearly vulnerabilities. |
+| `vulnerability_ssr_idr (SSR x Risk_internal + IDR x Risk_external)` | The same exposure, weighted over apparent supply instead. The two are reported side by side so the choice of weighting is visible rather than assumed. | Recalculated the same way. |
+| `food_risk_weighted (Vulnerability_weighted x Criticality)` | The headline figure: vulnerability scaled by how much the diet depends on the crop. | Recalculated too, as this row's vulnerability times this row's criticality. |
+| `food_risk_ssr_idr (Vulnerability_ssr_idr x Criticality)` | The same, built on the SSR/IDR vulnerability. | Recalculated the same way. |
 
 Blank cells in the AVERAGES row are deliberate: tonnages are not averaged, only
 the ratios are.
@@ -89,12 +91,6 @@ The following parameters can be configured:
   maps a display name to the spelling used in each source: `cpc` (`wheat`) for the
   production and trade datasets, `fbs` (`wheat and products`) for the food balance dataset.
 - `YEARS`: the first and last year to score, inclusive.
-- `USE_PROPORTIONAL_WEIGHTS`: which weights the vulnerability score uses
-  (default: `True`). `True` gives
-  `W_internal x Risk_internal + W_external x Risk_external`, splitting the
-  score over the inflows (`P + I`), so the weights sum to 1
-  whatever it exports. `False` gives the original
-  `SSR x Risk_internal + IDR x Risk_external`, taken over apparent supply.
 - `RISK_WINDOW`: how many years the internal risk (coefficient of variation of
   production) looks back over, including the current year (default: 5).
 - `MISSING_YEAR_POLICY`: how to read a year absent from a source series, one

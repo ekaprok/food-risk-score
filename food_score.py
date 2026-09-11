@@ -42,8 +42,6 @@ MISSING_YEAR_POLICY = {
     "suppliers":  FILL_ZERO,
 }
 
-USE_PROPORTIONAL_WEIGHTS = True
-
 ROUND_DECIMALS = 2
 OUT_PATH = "food_score.csv"
 
@@ -232,17 +230,13 @@ def external_risk(trade_matrix: pd.DataFrame, country: str,
                              MISSING_YEAR_POLICY["suppliers"], 0.0)
     return hhi.loc[YEARS[0]:YEARS[1]]
 
-def vulnerability_score(scores: pd.DataFrame) -> pd.Series:
-    """How exposed the country is on this commodity, per year over YEARS. The
-    two shares are W_internal and W_external when USE_PROPORTIONAL_WEIGHTS is
-    on and SSR and IDR when it is off. Every term arrives validated from the
-    function that built it, so this only combines them."""
-    if USE_PROPORTIONAL_WEIGHTS:
-        internal, external = scores["w_internal"], scores["w_external"]
-    else:
-        internal, external = scores["ssr"], scores["idr"]
-    return (internal * scores["risk_internal"]
-            + external * scores["risk_external"]).rename("vulnerability")
+def vulnerability_score(scores: pd.DataFrame, internal: str,
+                        external: str) -> pd.Series:
+    """How exposed the country is on this commodity, per year over YEARS: each
+    risk weighted by the share named for it, either the proportional weights
+    or SSR and IDR."""
+    return (scores[internal] * scores["risk_internal"]
+            + scores[external] * scores["risk_external"])
 
 def commodity_criticality(calories: pd.DataFrame, country: str,
                           commodity: str) -> pd.Series:
@@ -263,12 +257,13 @@ def commodity_criticality(calories: pd.DataFrame, country: str,
     return (calories_from(item) / total).rename("criticality")
 
 
-def food_risk(scores: pd.DataFrame) -> pd.Series:
-    """The food security risk, per year over YEARS: the vulnerability weighted
-    by how much of the national diet rides on the commodity. A shaky supply of
-    something barely eaten scores low; the same shakiness in a staple scores
-    high. Both terms arrive validated, so this only multiplies them."""
-    return (scores["vulnerability"] * scores["criticality"]).rename("food_risk")
+def food_risk(scores: pd.DataFrame, vulnerability: str) -> pd.Series:
+    """The food security risk, per year over YEARS: the vulnerability in the
+    `vulnerability` column weighted by how much of the national diet rides on
+    the commodity. A shaky supply of something barely eaten scores low; the
+    same shakiness in a staple scores high. Both terms arrive validated, so
+    this only multiplies them."""
+    return scores[vulnerability] * scores["criticality"]
 
 AVERAGES_LABEL = "AVERAGES"
 AVERAGED_COLUMNS = ["ssr", "idr", "w_internal", "w_external", "risk_external",
@@ -279,8 +274,11 @@ def averaged_scores(scores: pd.DataFrame) -> pd.DataFrame:
 
     # reads the `risk_internal` value for the last scored year
     summary["risk_internal"] = scores["risk_internal"].loc[YEARS[1]]
-    summary["vulnerability"] = vulnerability_score(summary)
-    summary["food_risk"] = food_risk(summary)
+    summary["vulnerability_weighted"] = vulnerability_score(
+        summary, "w_internal", "w_external")
+    summary["vulnerability_ssr_idr"] = vulnerability_score(summary, "ssr", "idr")
+    summary["food_risk_weighted"] = food_risk(summary, "vulnerability_weighted")
+    summary["food_risk_ssr_idr"] = food_risk(summary, "vulnerability_ssr_idr")
     summary.index = pd.Index([AVERAGES_LABEL], name=scores.index.name)
     return summary.reindex(columns=scores.columns)
 
@@ -297,13 +295,12 @@ COLUMN_FORMATS = [
     ("risk_internal", "Risk_internal",  "{:>14.2f}"),
     ("risk_external", "Risk_external",  "{:>14.2f}"),
     ("criticality",   "Criticality",    "{:>12.2f}"),
-    ("vulnerability", "Vulnerability",  "{:>14.2f}"),
-    ("food_risk",     "Food_risk",      "{:>10.2f}"),
+    ("vulnerability_weighted", "Vulnerability_weighted", "{:>23.2f}"),
+    ("vulnerability_ssr_idr",  "Vulnerability_ssr_idr",  "{:>22.2f}"),
+    ("food_risk_weighted",     "Food_risk_weighted",     "{:>19.2f}"),
+    ("food_risk_ssr_idr",      "Food_risk_ssr_idr",      "{:>18.2f}"),
 ]
 
-VULNERABILITY_FORMULA = ("W_internal x Risk_internal + W_external x Risk_external"
-                         if USE_PROPORTIONAL_WEIGHTS else
-                         "SSR x Risk_internal + IDR x Risk_external")
 CSV_COLUMN_NAMES = {
     "production":    "production (P)",
     "imports":       "imports (I)",
@@ -316,8 +313,15 @@ CSV_COLUMN_NAMES = {
     "risk_internal": "risk_internal (std(P) / mean(P))",
     "risk_external": "risk_external (sum(si^2))",
     "criticality":   "criticality (Kcal_commodity / Kcal_total)",
-    "vulnerability": f"vulnerability ({VULNERABILITY_FORMULA})",
-    "food_risk":     "food_risk (Vulnerability x Criticality)",
+    "vulnerability_weighted":
+        "vulnerability_weighted (W_internal x Risk_internal "
+        "+ W_external x Risk_external)",
+    "vulnerability_ssr_idr":
+        "vulnerability_ssr_idr (SSR x Risk_internal + IDR x Risk_external)",
+    "food_risk_weighted":
+        "food_risk_weighted (Vulnerability_weighted x Criticality)",
+    "food_risk_ssr_idr":
+        "food_risk_ssr_idr (Vulnerability_ssr_idr x Criticality)",
 }
 
 
@@ -369,17 +373,21 @@ def main() -> pd.DataFrame:
         for commodity in sorted(COMMODITIES):
             print("=" * 132)
             print(f"{country.upper()} / {commodity.upper()}  ({YEARS[0]}-{YEARS[1]})")
-            print(f"Risk_internal: CV of production over a trailing "
+            print(f"Risk_internal:          CV of production over a trailing "
                   f"{RISK_WINDOW}-year window")
-            print("Risk_external: HHI of import-supplier concentration "
+            print("Risk_external:          HHI of import-supplier concentration "
                   "(1/n spread out, 1.0 a single supplier)")
-            print("Criticality:   the commodity's share of the national "
+            print("Criticality:            the commodity's share of the national "
                   "calorie supply")
-            print(f"Vulnerability: {VULNERABILITY_FORMULA}")
-            print("Food_risk:     Vulnerability x Criticality")
-            print(f"{AVERAGES_LABEL}:      the whole span as one row: the ratios "
-                  "and weights averaged over it, Vulnerability and Food_risk "
-                  "built from those")
+            print("Vulnerability_weighted: W_internal x Risk_internal "
+                  "+ W_external x Risk_external")
+            print("Vulnerability_ssr_idr:  SSR x Risk_internal "
+                  "+ IDR x Risk_external")
+            print("Food_risk_weighted:     Vulnerability_weighted x Criticality")
+            print("Food_risk_ssr_idr:      Vulnerability_ssr_idr x Criticality")
+            print(f"{AVERAGES_LABEL}:               the whole span as one row: "
+                  "the ratios and weights averaged over it, both Vulnerability "
+                  "and both Food_risk columns built from those")
 
             pair = {name: rows_for_pair(data[name], country,
                                         COMMODITIES[commodity]["cpc"])
@@ -391,8 +399,11 @@ def main() -> pd.DataFrame:
                 data["trade_matrix_mirror"], country, commodity)
             scores["criticality"] = commodity_criticality(
                 data["calories"], country, commodity)
-            scores["vulnerability"] = vulnerability_score(scores)
-            scores["food_risk"] = food_risk(scores)
+            scores["vulnerability_weighted"] = vulnerability_score(
+                scores, "w_internal", "w_external")
+            scores["vulnerability_ssr_idr"] = vulnerability_score(scores, "ssr", "idr")
+            scores["food_risk_weighted"] = food_risk(scores, "vulnerability_weighted")
+            scores["food_risk_ssr_idr"] = food_risk(scores, "vulnerability_ssr_idr")
             scores = pd.concat([scores, averaged_scores(scores)])
             tables.append(scores.assign(country=country, commodity=commodity))
 
