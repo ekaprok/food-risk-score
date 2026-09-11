@@ -63,8 +63,8 @@ plus an AVERAGES row and a blank separator line after each block.
 | `food_risk_weighted (Vulnerability_weighted x Criticality)` | The headline figure: vulnerability scaled by how much the diet depends on the crop. | Recalculated too, as this row's vulnerability times this row's criticality. |
 | `food_risk_ssr_idr (Vulnerability_ssr_idr x Criticality)` | The same, built on the SSR/IDR vulnerability. | Recalculated the same way. |
 | `top_supplier (biggest supplier by tracked volume)` | The country that shipped the most of the crop that year, as recorded in the trade matrix. | - |
-| `top_supplier_share (s_max = Volume_max / Volume_trade)` | How much of the year's tracked flows that one supplier accounted for. 0.4 means it shipped 40% of everything the matrix records for that year. | - |
-| `food_risk_weighted_sim (Vulnerability_weighted_sim x Criticality), the biggest supplier gone` | The what-if: `food_risk_weighted` recalculated as though the biggest supplier stopped shipping. Imports are cut by its share (`I_new = I x (1 - s_max)`), the weights are rebuilt from `P + I_new`, and the external risk is the concentration of the suppliers that remain. | - |
+| `top_supplier_share (s_max = Volume_max / Volume_trade)` | How much of the year's tracked flows that one supplier accounted for. 0.4 means it shipped 40% of everything the matrix records for that year. | The plain average of the yearly values over `YEARS`. |
+| `food_risk_weighted_sim (Vulnerability_weighted_sim x Criticality), the biggest supplier gone` | The what-if: `food_risk_weighted` recalculated as though the biggest supplier stopped shipping. Imports are cut by its share (`I_new = I x (1 - s_max)`), the weights are rebuilt from `P + I_new`, and the external risk is the concentration of the suppliers that remain. | Recalculated from the averaged figures in this row, like the other scores. |
 
 ### Simulation: what if the biggest supplier stopped shipping?
 

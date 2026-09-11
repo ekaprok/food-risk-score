@@ -599,6 +599,10 @@ class TestAveragedScores(YearsCase):
         self.assertAlmostEqual(row["w_external"], 0.3)
         self.assertAlmostEqual(row["risk_external"], 0.7)
         self.assertAlmostEqual(row["criticality"], 0.4)
+        self.assertAlmostEqual(row["top_supplier_share"], 0.375)
+        self.assertAlmostEqual(row["risk_external_sim"], 0.35)
+        self.assertAlmostEqual(row["w_internal_sim"], 0.85)
+        self.assertAlmostEqual(row["w_external_sim"], 0.15)
 
         # The last year's window, not the mean of the two.
         self.assertAlmostEqual(row["risk_internal"], 0.4)
@@ -606,25 +610,20 @@ class TestAveragedScores(YearsCase):
         for tonnage in ("production", "imports", "exports", "supply"):
             self.assertTrue(pd.isna(row[tonnage]), tonnage)
 
-        # The simulation is a year-by-year what-if, so the span has no row of
-        # its own: averaging five different suppliers lost would stand for no
-        # one year.
-        for simulated in ("top_supplier_share", "risk_external_sim",
-                          "w_internal_sim", "w_external_sim",
-                          "vulnerability_weighted_sim",
-                          "food_risk_weighted_sim"):
-            self.assertTrue(pd.isna(row[simulated]), simulated)
-
         # Both pairs are built from the averages above, so none of the four is
         # the mean of the yearly scores the fixture carries.
         weighted = 0.7 * 0.4 + 0.3 * 0.7
         ssr_idr = 0.6 * 0.4 + 0.4 * 0.7
+        simulated_vulnerability = 0.85 * 0.4 + 0.15 * 0.35
         self.assertAlmostEqual(row["vulnerability_weighted"], weighted)
         self.assertAlmostEqual(row["vulnerability_ssr_idr"], ssr_idr)
         self.assertAlmostEqual(row["food_risk_weighted"], weighted * 0.4)
         self.assertAlmostEqual(row["food_risk_ssr_idr"], ssr_idr * 0.4)
+        self.assertAlmostEqual(row["vulnerability_weighted_sim"], simulated_vulnerability)
+        self.assertAlmostEqual(row["food_risk_weighted_sim"], simulated_vulnerability * 0.4)
         for column in ("vulnerability_weighted", "vulnerability_ssr_idr",
-                       "food_risk_weighted", "food_risk_ssr_idr"):
+                       "food_risk_weighted", "food_risk_ssr_idr",
+                       "vulnerability_weighted_sim", "food_risk_weighted_sim"):
             self.assertNotAlmostEqual(row[column], self.SCORES[column].mean(),
                                       msg=column)
 

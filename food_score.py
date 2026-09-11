@@ -315,11 +315,14 @@ def food_risk(scores: pd.DataFrame, vulnerability: str) -> pd.Series:
 
 AVERAGES_LABEL = "AVERAGES"
 AVERAGED_COLUMNS = ["ssr", "idr", "w_internal", "w_external", "risk_external",
-                    "criticality"]
+                    "criticality", "top_supplier_share", "risk_external_sim",
+                    "w_internal_sim", "w_external_sim"]
 def averaged_scores(scores: pd.DataFrame) -> pd.DataFrame:
     """The one-row AVERAGES table summarising the whole of YEARS. The
-    simulation columns are left blank: a what-if reads year by year, and an
-    average of five different suppliers lost would stand for no one year."""
+    simulation is summarised the same way as the rest: the shocked weights and
+    risks averaged over the span, the scores rebuilt from those. Only
+    `top_supplier` is left blank -- the biggest supplier can differ from year
+    to year, so the span names no one country."""
     summary = scores[AVERAGED_COLUMNS].mean().to_frame().T
 
     # reads the `risk_internal` value for the last scored year
@@ -329,6 +332,10 @@ def averaged_scores(scores: pd.DataFrame) -> pd.DataFrame:
     summary["vulnerability_ssr_idr"] = vulnerability_score(summary, "ssr", "idr")
     summary["food_risk_weighted"] = food_risk(summary, "vulnerability_weighted")
     summary["food_risk_ssr_idr"] = food_risk(summary, "vulnerability_ssr_idr")
+    summary["vulnerability_weighted_sim"] = vulnerability_score(
+        summary, "w_internal_sim", "w_external_sim", "risk_external_sim")
+    summary["food_risk_weighted_sim"] = food_risk(
+        summary, "vulnerability_weighted_sim")
     summary.index = pd.Index([AVERAGES_LABEL], name=scores.index.name)
     return summary.reindex(columns=scores.columns)
 
@@ -451,8 +458,8 @@ def main() -> pd.DataFrame:
                   "and Risk_external rebuilt from what is left")
             print(f"{AVERAGES_LABEL}:               the whole span as one row: "
                   "the ratios and weights averaged over it, both Vulnerability "
-                  "and both Food_risk columns built from those; the simulation "
-                  "reads year by year, so it is left blank")
+                  "and both Food_risk columns built from those, the "
+                  "simulation included")
 
             pair = {name: rows_for_pair(data[name], country,
                                         COMMODITIES[commodity]["cpc"])
