@@ -62,9 +62,39 @@ plus an AVERAGES row and a blank separator line after each block.
 | `vulnerability_ssr_idr (SSR x Risk_internal + IDR x Risk_external)` | The same exposure, weighted over apparent supply instead. The two are reported side by side so the choice of weighting is visible rather than assumed. | Recalculated the same way. |
 | `food_risk_weighted (Vulnerability_weighted x Criticality)` | The headline figure: vulnerability scaled by how much the diet depends on the crop. | Recalculated too, as this row's vulnerability times this row's criticality. |
 | `food_risk_ssr_idr (Vulnerability_ssr_idr x Criticality)` | The same, built on the SSR/IDR vulnerability. | Recalculated the same way. |
+| `top_supplier (biggest supplier by tracked volume)` | The country that shipped the most of the crop that year, as recorded in the trade matrix. | - |
+| `top_supplier_share (s_max = Volume_max / Volume_trade)` | How much of the year's tracked flows that one supplier accounted for. 0.4 means it shipped 40% of everything the matrix records for that year. | - |
+| `food_risk_weighted_sim (Vulnerability_weighted_sim x Criticality), the biggest supplier gone` | The what-if: `food_risk_weighted` recalculated as though the biggest supplier stopped shipping. Imports are cut by its share (`I_new = I x (1 - s_max)`), the weights are rebuilt from `P + I_new`, and the external risk is the concentration of the suppliers that remain. | - |
 
-Blank cells in the AVERAGES row are deliberate: tonnages are not averaged, only
-the ratios are.
+### Simulation: what if the biggest supplier stopped shipping?
+
+The last three columns answer one what-if question per year: the country's
+largest supplier stops shipping, and everything else stays as it was. Six
+steps, the first three in the trade matrix and the rest in the supply balance.
+
+**1. Find the biggest supplier.** Add up what each supplier shipped the country
+that year, and take the largest. That is `top_supplier`, and its tonnage is
+`Volume_max`. Everything the matrix records for that year adds up to
+`Volume_trade`.
+
+**2. Work out its share.** `s_max = Volume_max / Volume_trade`. If the biggest
+supplier shipped 880,000 t of a tracked 1,000,000 t, `s_max` is 0.88 — it
+covered 88% of the flows on record.
+
+**3. Rescore the suppliers that are left.** Drop the biggest one, add up what
+the others shipped, and work out each one's share of *that* smaller total.
+Square the shares and add them up: that is `Risk_external_sim`. Two suppliers
+splitting the remainder evenly score 0.5; a single one left scores 1.0.
+
+**4. Shrink the imports.** The aggregate import tonnage `I` loses the same
+percentage: `I_new = I x (1 - s_max)`. With `s_max` at 0.88, 88% of the imports
+go and 12% remain.
+
+**5. Rebuild the weights.** Production is untouched, so the country now leans
+harder on what it grows: `w_internal_sim = P / (P + I_new)` and
+`w_external_sim = I_new / (P + I_new)`. The two still add up to 1.
+
+**6. Rescore.** The ordinary formulas, with the shocked figures in place of the
 
 ### Which dataset feeds which term
 
@@ -75,6 +105,7 @@ the ratios are.
 | Risk_internal | `Production_WheatRice` | Production |
 | C_kcal | `Calories_TotalAndWheat` | Food supply (kcal/cap/d) |
 | Risk_external | `Trade_ReporterAll_...` | Export quantity |
+| s_max, Risk_external_sim | `Trade_ReporterAll_...` | Export quantity |
 
 A year missing from a source file throws an error, unless `MISSING_YEAR_POLICY`
 gives that series another reading.

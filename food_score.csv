@@ -1,15 +1,15 @@
-country,commodity,year,production (P),imports (I),exports (E),supply (P + I - E),ssr (P / Supply),idr (I / Supply),w_internal (P / (P + I)),w_external (I / (P + I)),risk_internal (std(P) / mean(P)),risk_external (sum(si^2)),criticality (Kcal_commodity / Kcal_total),vulnerability_weighted (W_internal x Risk_internal + W_external x Risk_external),vulnerability_ssr_idr (SSR x Risk_internal + IDR x Risk_external),food_risk_weighted (Vulnerability_weighted x Criticality),food_risk_ssr_idr (Vulnerability_ssr_idr x Criticality)
-Afghanistan,Wheat,2020,5185000.0,598254.11,20.68,5783233.43,0.9,0.1,0.9,0.1,0.13,0.79,0.6,0.2,0.2,0.12,0.12
-Afghanistan,Wheat,2021,4017657.0,575749.94,0.0,4593406.94,0.87,0.13,0.87,0.13,0.15,0.98,0.58,0.25,0.25,0.15,0.15
-Afghanistan,Wheat,2022,3802895.0,733011.93,0.0,4535906.93,0.84,0.16,0.84,0.16,0.16,0.88,0.59,0.28,0.28,0.16,0.16
-Afghanistan,Wheat,2023,4350662.0,482890.19,0.01,4833552.18,0.9,0.1,0.9,0.1,0.13,0.87,0.59,0.2,0.2,0.12,0.12
-Afghanistan,Wheat,2024,5200000.0,274399.39,2718.04,5471681.35,0.95,0.05,0.95,0.05,0.14,0.85,0.59,0.18,0.18,0.11,0.11
-Afghanistan,Wheat,AVERAGES,,,,,0.89,0.11,0.89,0.11,0.14,0.87,0.59,0.22,0.22,0.13,0.13
-,,,,,,,,,,,,,,,,,
-Yemen,Wheat,2020,130000.0,3044898.12,231.0,3174667.12,0.04,0.96,0.04,0.96,0.15,0.23,0.41,0.23,0.23,0.09,0.09
-Yemen,Wheat,2021,115943.92,3065072.1,783.16,3180232.86,0.04,0.96,0.04,0.96,0.15,0.21,0.41,0.21,0.21,0.09,0.09
-Yemen,Wheat,2022,100000.0,2853322.95,75.56,2953247.39,0.03,0.97,0.03,0.97,0.14,0.22,0.41,0.22,0.22,0.09,0.09
-Yemen,Wheat,2023,100000.0,1907403.23,100.92,2007302.31,0.05,0.95,0.05,0.95,0.12,0.54,0.32,0.52,0.52,0.17,0.17
-Yemen,Wheat,2024,98000.0,2195225.6,0.0,2293225.6,0.04,0.96,0.04,0.96,0.13,0.56,0.32,0.54,0.54,0.18,0.18
-Yemen,Wheat,AVERAGES,,,,,0.04,0.96,0.04,0.96,0.13,0.35,0.38,0.34,0.34,0.13,0.13
-,,,,,,,,,,,,,,,,,
+country,commodity,year,production (P),imports (I),exports (E),supply (P + I - E),ssr (P / Supply),idr (I / Supply),w_internal (P / (P + I)),w_external (I / (P + I)),risk_internal (std(P) / mean(P)),risk_external (sum(si^2)),criticality (Kcal_commodity / Kcal_total),vulnerability_weighted (W_internal x Risk_internal + W_external x Risk_external),vulnerability_ssr_idr (SSR x Risk_internal + IDR x Risk_external),food_risk_weighted (Vulnerability_weighted x Criticality),food_risk_ssr_idr (Vulnerability_ssr_idr x Criticality),top_supplier (biggest supplier by tracked volume),top_supplier_share (s_max = Volume_max / Volume_trade),"food_risk_weighted_sim (Vulnerability_weighted_sim x Criticality), the biggest supplier gone"
+Afghanistan,Wheat,2020,5185000.0,598254.11,20.68,5783233.43,0.9,0.1,0.9,0.1,0.13,0.79,0.6,0.2,0.2,0.12,0.12,Kazakhstan,0.88,0.08
+Afghanistan,Wheat,2021,4017657.0,575749.94,0.0,4593406.94,0.87,0.13,0.87,0.13,0.15,0.98,0.58,0.25,0.25,0.15,0.15,Kazakhstan,0.99,0.08
+Afghanistan,Wheat,2022,3802895.0,733011.93,0.0,4535906.93,0.84,0.16,0.84,0.16,0.16,0.88,0.59,0.28,0.28,0.16,0.16,Kazakhstan,0.94,0.1
+Afghanistan,Wheat,2023,4350662.0,482890.19,0.01,4833552.18,0.9,0.1,0.9,0.1,0.13,0.87,0.59,0.2,0.2,0.12,0.12,Kazakhstan,0.93,0.08
+Afghanistan,Wheat,2024,5200000.0,274399.39,2718.04,5471681.35,0.95,0.05,0.95,0.05,0.14,0.85,0.59,0.18,0.18,0.11,0.11,Kazakhstan,0.92,0.09
+Afghanistan,Wheat,AVERAGES,,,,,0.89,0.11,0.89,0.11,0.14,0.87,0.59,0.22,0.22,0.13,0.13,,,
+,,,,,,,,,,,,,,,,,,,,
+Yemen,Wheat,2020,130000.0,3044898.12,231.0,3174667.12,0.04,0.96,0.04,0.96,0.15,0.23,0.41,0.23,0.23,0.09,0.09,United States of America,0.28,0.12
+Yemen,Wheat,2021,115943.92,3065072.1,783.16,3180232.86,0.04,0.96,0.04,0.96,0.15,0.21,0.41,0.21,0.21,0.09,0.09,Australia,0.28,0.11
+Yemen,Wheat,2022,100000.0,2853322.95,75.56,2953247.39,0.03,0.97,0.03,0.97,0.14,0.22,0.41,0.22,0.22,0.09,0.09,Australia,0.34,0.1
+Yemen,Wheat,2023,100000.0,1907403.23,100.92,2007302.31,0.05,0.95,0.05,0.95,0.12,0.54,0.32,0.52,0.52,0.17,0.17,Australia,0.71,0.12
+Yemen,Wheat,2024,98000.0,2195225.6,0.0,2293225.6,0.04,0.96,0.04,0.96,0.13,0.56,0.32,0.54,0.54,0.18,0.18,Australia,0.72,0.16
+Yemen,Wheat,AVERAGES,,,,,0.04,0.96,0.04,0.96,0.13,0.35,0.38,0.34,0.34,0.13,0.13,,,
+,,,,,,,,,,,,,,,,,,,,
