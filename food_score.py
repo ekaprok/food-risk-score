@@ -12,17 +12,17 @@ import pandas as pd
 DATA_DIR = "faostat"
 
 DATASETS = {
-    "production": f"{DATA_DIR}/AfgThai_Production_WheatRice.csv",
-    "trade":      f"{DATA_DIR}/AfgThai_ImportAndExport_WheatRice.csv",
-    "calories":   f"{DATA_DIR}/AfgThai_Calories_TotalRiceWheat.csv",
-    "trade_matrix_mirror": f"{DATA_DIR}/AfgThai_Trade_ReporterAll_WheatRice.csv",
+    "production": f"{DATA_DIR}/Production.csv",
+    "trade":      f"{DATA_DIR}/ImportExport.csv",
+    "calories":   f"{DATA_DIR}/Calories.csv",
+    "trade_matrix_mirror": f"{DATA_DIR}/TradeMatrix.csv",
 }
 
-COUNTRIES = ("Afghanistan", "Thailand")
+COUNTRIES = ("Afghanistan", "Yemen")
 # What each commodity is called in the files it appears in: the crop and trade
 # files go by the CPC name, the food balance sheets by FBS.
 COMMODITIES = {
-    "Rice":  {"cpc": "Rice",  "fbs": "Rice and products"},
+    # "Rice":  {"cpc": "Rice",  "fbs": "Rice and products"},
     "Wheat": {"cpc": "Wheat", "fbs": "Wheat and products"},
 }
 

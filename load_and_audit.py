@@ -17,10 +17,10 @@ import pandas as pd
 DATA_DIR = "faostat"
 
 DATASETS = {
-    "production":          f"{DATA_DIR}/AfgThai_Production_WheatRice.csv",
-    "trade":               f"{DATA_DIR}/AfgThai_ImportAndExport_WheatRice.csv",
-    "calories":            f"{DATA_DIR}/AfgThai_Calories_TotalRiceWheat.csv",
-    "trade_matrix_mirror": f"{DATA_DIR}/AfgThai_Trade_ReporterAll_WheatRice.csv",
+    "production": f"{DATA_DIR}/Production.csv",
+    "trade":      f"{DATA_DIR}/ImportExport.csv",
+    "calories":   f"{DATA_DIR}/Calories.csv",
+    "trade_matrix_mirror": f"{DATA_DIR}/TradeMatrix.csv",
 }
 
 # Which column names the supplier, per trade-matrix orientation.
