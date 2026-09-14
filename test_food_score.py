@@ -343,26 +343,6 @@ class TestExternalRisk(YearsCase):
         self.assertEqual(risk.loc[2022], 0.0)
         self.assertIn("with zero for 2022", printed)
 
-    def test_it_can_leave_a_supplier_out(self):
-        file = matrix_rows([
-            ("Kazakhstan", "Afghanistan", "Wheat", "Export quantity", "2020", "600"),
-            ("Pakistan",   "Afghanistan", "Wheat", "Export quantity", "2020", "300"),
-            ("India",      "Afghanistan", "Wheat", "Export quantity", "2020", "100"),
-            ("Kazakhstan", "Afghanistan", "Wheat", "Export quantity", "2021", "900"),
-            ("Pakistan",   "Afghanistan", "Wheat", "Export quantity", "2022", "500"),
-            ("India",      "Afghanistan", "Wheat", "Export quantity", "2022", "300"),
-        ])
-        self.set_years((2020, 2022))
-        without = pd.Series(["Kazakhstan", "Kazakhstan", float("nan")],
-                            index=[2020, 2021, 2022])
-        risk, printed = capture(food_score.external_risk, file, "Afghanistan",
-                                "Wheat", without)
-
-        self.assertAlmostEqual(risk.loc[2020], (300 / 400) ** 2 + (100 / 400) ** 2)
-        self.assertEqual(risk.loc[2021], 0.0)
-        self.assertIn("minus the biggest supplier with zero for 2021", printed)
-        self.assertAlmostEqual(risk.loc[2022], (500 / 800) ** 2 + (300 / 800) ** 2)
-
     def test_an_importer_the_matrix_does_not_carry_raises(self):
         with self.assertRaisesRegex(ValueError, "no supplier rows for Peru / Wheat"):
             food_score.external_risk(self.FILE, "Peru", "Wheat")
@@ -422,7 +402,7 @@ class TestTopSupplier(YearsCase):
         self.assertAlmostEqual(biggest["top_supplier_share"].loc[2021], 900/900)
 
 
-    def test_a_year_with_no_supplier_rows_is_no_shock(self):
+    def test_a_year_with_no_supplier_rows_names_no_supplier(self):
         self.set_years((2020, 2022))
         biggest = food_score.top_supplier(self.FILE, "Afghanistan", "Wheat")
 
@@ -430,40 +410,12 @@ class TestTopSupplier(YearsCase):
         self.assertEqual(biggest["top_supplier_share"].loc[2022], 0.0)
 
 
-class TestShockedWeights(unittest.TestCase):
-    """The proportional weights after the biggest supplier's share comes off
-    the aggregate imports."""
-
-    SCORES = pd.DataFrame(
-        {"production": [100.0, 300.0], "imports": [80.0, 200.0],
-         "top_supplier_share": [0.5, 0.0]},
-        index=[2020, 2021], dtype=float)
-
-    def test_the_imports_shrink_by_the_biggest_supplier_share(self):
-        weights = food_score.shocked_weights(self.SCORES)
-
-        production, imports_left = 100, 80 * (1 - 0.5)
-        self.assertAlmostEqual(weights["w_internal_sim"].loc[2020],
-                               production / (production + imports_left))
-        self.assertAlmostEqual(weights["w_external_sim"].loc[2020],
-                               imports_left / (production + imports_left))
-
-        # A year with no shock keeps the weights where they were.
-        production, imports_left = 300, 200 * (1 - 0.0)
-        self.assertAlmostEqual(weights["w_internal_sim"].loc[2021],
-                               production / (production + imports_left))
-        self.assertAlmostEqual(weights["w_external_sim"].loc[2021],
-                               imports_left / (production + imports_left))
-
-
 class TestVulnerabilityScore(unittest.TestCase):
 
     SCORES = pd.DataFrame(
         {"ssr": [0.8, 0.5], "idr": [0.2, 0.5],
          "w_internal": [0.7, 0.3], "w_external": [0.3, 0.7],
-         "w_internal_sim": [0.9, 0.95], "w_external_sim": [0.1, 0.05],
-         "risk_internal": [0.1, 0.4], "risk_external": [0.5, 0.6],
-         "risk_external_sim": [0.8, 0.2]},
+         "risk_internal": [0.1, 0.4], "risk_external": [0.5, 0.6]},
         index=[2020, 2021], dtype=float)
 
     def test_the_proportional_weights_weight_the_two_risks(self):
@@ -482,16 +434,6 @@ class TestVulnerabilityScore(unittest.TestCase):
         first, second = score.tolist()
         self.assertAlmostEqual(first, 0.8 * 0.1 + 0.2 * 0.5)
         self.assertAlmostEqual(second, 0.5 * 0.4 + 0.5 * 0.6)
-
-    def test_the_simulation_reads_the_external_risk_it_is_given(self):
-        score = food_score.vulnerability_score(
-            self.SCORES, "w_internal_sim", "w_external_sim", "risk_external_sim")
-
-        first, second = score.tolist()
-        self.assertAlmostEqual(first, 0.9 * 0.1 + 0.1 * 0.8)
-        self.assertAlmostEqual(second, 0.95 * 0.4 + 0.05 * 0.2)
-        # Not the unshocked external risk the same row also carries.
-        self.assertNotAlmostEqual(first, 0.9 * 0.1 + 0.1 * 0.5)
 
 KCAL = "Food supply (kcal/capita/day)"
 
@@ -578,11 +520,7 @@ class TestAveragedScores(YearsCase):
          "vulnerability_ssr_idr": [0.26, 0.7],
          "food_risk_weighted": [0.138, 0.13],
          "food_risk_ssr_idr": [0.156, 0.14],
-         "top_supplier_share": [0.5, 0.25],
-         "risk_external_sim": [0.3, 0.4],
-         "w_internal_sim": [0.95, 0.75], "w_external_sim": [0.05, 0.25],
-         "vulnerability_weighted_sim": [0.205, 0.4],
-         "food_risk_weighted_sim": [0.123, 0.08]},
+         "top_supplier_share": [0.5, 0.25]},
         index=pd.Index([2020, 2021], name="year"), dtype=float)
 
     def test_it_summarises_the_span_in_one_row(self):
@@ -600,9 +538,6 @@ class TestAveragedScores(YearsCase):
         self.assertAlmostEqual(row["risk_external"], 0.7)
         self.assertAlmostEqual(row["criticality"], 0.4)
         self.assertAlmostEqual(row["top_supplier_share"], 0.375)
-        self.assertAlmostEqual(row["risk_external_sim"], 0.35)
-        self.assertAlmostEqual(row["w_internal_sim"], 0.85)
-        self.assertAlmostEqual(row["w_external_sim"], 0.15)
 
         # The last year's window, not the mean of the two.
         self.assertAlmostEqual(row["risk_internal"], 0.4)
@@ -614,16 +549,12 @@ class TestAveragedScores(YearsCase):
         # the mean of the yearly scores the fixture carries.
         weighted = 0.7 * 0.4 + 0.3 * 0.7
         ssr_idr = 0.6 * 0.4 + 0.4 * 0.7
-        simulated_vulnerability = 0.85 * 0.4 + 0.15 * 0.35
         self.assertAlmostEqual(row["vulnerability_weighted"], weighted)
         self.assertAlmostEqual(row["vulnerability_ssr_idr"], ssr_idr)
         self.assertAlmostEqual(row["food_risk_weighted"], weighted * 0.4)
         self.assertAlmostEqual(row["food_risk_ssr_idr"], ssr_idr * 0.4)
-        self.assertAlmostEqual(row["vulnerability_weighted_sim"], simulated_vulnerability)
-        self.assertAlmostEqual(row["food_risk_weighted_sim"], simulated_vulnerability * 0.4)
         for column in ("vulnerability_weighted", "vulnerability_ssr_idr",
-                       "food_risk_weighted", "food_risk_ssr_idr",
-                       "vulnerability_weighted_sim", "food_risk_weighted_sim"):
+                       "food_risk_weighted", "food_risk_ssr_idr"):
             self.assertNotAlmostEqual(row[column], self.SCORES[column].mean(),
                                       msg=column)
 

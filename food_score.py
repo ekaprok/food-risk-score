@@ -231,23 +231,13 @@ def supplier_flows(trade_matrix: pd.DataFrame, country: str,
             .groupby(["year", "supplier"])["flow"].sum())
 
 
-def external_risk(trade_matrix: pd.DataFrame, country: str, commodity: str,
-                  without: pd.Series | None = None) -> pd.Series:
+def external_risk(trade_matrix: pd.DataFrame, country: str,
+                  commodity: str) -> pd.Series:
     """How concentrated the country's import suppliers are, per year over
     YEARS: the Herfindahl-Hirschman index of each supplier's share of the
     flows recorded for that year. 1/n when n suppliers ship equal shares,
-    1.0 when a single supplier ships everything. `without` names one supplier
-    per year to leave out -- the biggest one, say -- and the rest are then
-    scored on their own smaller total."""
+    1.0 when a single supplier ships everything."""
     flows = supplier_flows(trade_matrix, country, commodity)
-    # Names this call in whatever fill_missing_years reports below, so the two
-    # runs over the same matrix do not print the same sentence.
-    filling = "Export quantity"
-    if without is not None:
-        # A year the matrix does not cover names no supplier, so ignore the
-        # labels that are not there rather than raising on them.
-        flows = flows.drop(index=list(without.items()), errors="ignore")
-        filling += " minus the biggest supplier"
 
     # A year whose recorded flows add up to nothing has no shares to divide
     # out; drop it and let MISSING_YEAR_POLICY say what an absent year reads as.
@@ -256,8 +246,8 @@ def external_risk(trade_matrix: pd.DataFrame, country: str, commodity: str,
     share = flows[recorded] / yearly_total[recorded]
     hhi = (share ** 2).groupby(level="year").sum().rename("risk_external")
 
-    hhi = fill_missing_years(hhi, "trade_matrix_mirror", filling, YEARS,
-                             MISSING_YEAR_POLICY["suppliers"], 0.0)
+    hhi = fill_missing_years(hhi, "trade_matrix_mirror", "Export quantity",
+                             YEARS, MISSING_YEAR_POLICY["suppliers"], 0.0)
     return hhi.loc[YEARS[0]:YEARS[1]]
 
 
@@ -265,7 +255,7 @@ def top_supplier(trade_matrix: pd.DataFrame, country: str,
                  commodity: str) -> pd.DataFrame:
     """The biggest supplier of each year over YEARS and its share s_max of the
     flows tracked that year. A year with nothing tracked has no biggest
-    supplier and no shock to simulate, so its share reads as 0."""
+    supplier, so its share reads as 0."""
     flows = supplier_flows(trade_matrix, country, commodity)
     by_year = flows[flows.groupby(level="year").transform("sum") > 0].groupby(
         level="year")
@@ -279,24 +269,13 @@ def top_supplier(trade_matrix: pd.DataFrame, country: str,
         "top_supplier_share": by_year.max() / by_year.sum(),
     }).reindex(span).fillna({"top_supplier_share": 0.0})
 
-def vulnerability_score(scores: pd.DataFrame, internal: str, external: str,
-                        risk_external: str = "risk_external") -> pd.Series:
+def vulnerability_score(scores: pd.DataFrame, internal: str,
+                        external: str) -> pd.Series:
     """How exposed the country is on this commodity, per year over YEARS: each
     risk weighted by the share named for it, either the proportional weights
-    or SSR and IDR. `risk_external` names the external risk to read, so the
-    simulation can weigh the suppliers left against the same internal risk."""
+    or SSR and IDR."""
     return (scores[internal] * scores["risk_internal"]
-            + scores[external] * scores[risk_external])
-
-
-def shocked_weights(scores: pd.DataFrame) -> pd.DataFrame:
-    """The proportional weights once the biggest supplier stops shipping: the
-    aggregate imports cut by its share, I_new = I x (1 - s_max), and the two
-    shares of the inflows P + I_new that are left."""
-    imports = scores["imports"] * (1 - scores["top_supplier_share"])
-    inflows = scores["production"] + imports
-    return pd.DataFrame({"w_internal_sim": scores["production"] / inflows,
-                         "w_external_sim": imports / inflows})
+            + scores[external] * scores["risk_external"])
 
 
 # Wheat criticality for countries the calories dataset does not cover.
@@ -339,12 +318,10 @@ def food_risk(scores: pd.DataFrame, vulnerability: str) -> pd.Series:
 
 AVERAGES_LABEL = "AVERAGES"
 AVERAGED_COLUMNS = ["ssr", "idr", "w_internal", "w_external", "risk_external",
-                    "criticality", "top_supplier_share", "risk_external_sim",
-                    "w_internal_sim", "w_external_sim"]
+                    "criticality", "top_supplier_share"]
 def averaged_scores(scores: pd.DataFrame) -> pd.DataFrame:
-    """The one-row AVERAGES table summarising the whole of YEARS. The
-    simulation is summarised the same way as the rest: the shocked weights and
-    risks averaged over the span, the scores rebuilt from those. Only
+    """The one-row AVERAGES table summarising the whole of YEARS: the ratios
+    and weights averaged over the span, the scores rebuilt from those. Only
     `top_supplier` is left blank -- the biggest supplier can differ from year
     to year, so the span names no one country."""
     summary = scores[AVERAGED_COLUMNS].mean().to_frame().T
@@ -356,10 +333,6 @@ def averaged_scores(scores: pd.DataFrame) -> pd.DataFrame:
     summary["vulnerability_ssr_idr"] = vulnerability_score(summary, "ssr", "idr")
     summary["food_risk_weighted"] = food_risk(summary, "vulnerability_weighted")
     summary["food_risk_ssr_idr"] = food_risk(summary, "vulnerability_ssr_idr")
-    summary["vulnerability_weighted_sim"] = vulnerability_score(
-        summary, "w_internal_sim", "w_external_sim", "risk_external_sim")
-    summary["food_risk_weighted_sim"] = food_risk(
-        summary, "vulnerability_weighted_sim")
     summary.index = pd.Index([AVERAGES_LABEL], name=scores.index.name)
     return summary.reindex(columns=scores.columns)
 
@@ -382,7 +355,6 @@ COLUMN_FORMATS = [
     ("food_risk_ssr_idr",      "Food_risk_ssr_idr",      "{:>18.2f}"),
     ("top_supplier",           "Top_supplier",           "{:>24}"),
     ("top_supplier_share",     "Top_supplier_share",     "{:>19.2f}"),
-    ("food_risk_weighted_sim", "Food_risk_weighted_sim", "{:>23.2f}"),
 ]
 
 CSV_COLUMN_NAMES = {
@@ -409,9 +381,6 @@ CSV_COLUMN_NAMES = {
     "top_supplier":       "top_supplier (biggest supplier by tracked volume)",
     "top_supplier_share":
         "top_supplier_share (s_max = Volume_max / Volume_trade)",
-    "food_risk_weighted_sim":
-        "food_risk_weighted_sim (Vulnerability_weighted_sim x Criticality), "
-        "the biggest supplier gone",
 }
 
 
@@ -477,13 +446,9 @@ def main() -> pd.DataFrame:
             print("Food_risk_ssr_idr:      Vulnerability_ssr_idr x Criticality")
             print("Top_supplier:           the biggest supplier of the year "
                   "and its share s_max of the tracked flows")
-            print("Food_risk_weighted_sim: Food_risk_weighted with that "
-                  "supplier gone: imports cut to I x (1 - s_max), the weights "
-                  "and Risk_external rebuilt from what is left")
             print(f"{AVERAGES_LABEL}:               the whole span as one row: "
                   "the ratios and weights averaged over it, both Vulnerability "
-                  "and both Food_risk columns built from those, the "
-                  "simulation included")
+                  "and both Food_risk columns built from those")
 
             pair = {name: rows_for_pair(data[name], country,
                                         COMMODITIES[commodity]["cpc"],
@@ -502,20 +467,9 @@ def main() -> pd.DataFrame:
             scores["food_risk_weighted"] = food_risk(scores, "vulnerability_weighted")
             scores["food_risk_ssr_idr"] = food_risk(scores, "vulnerability_ssr_idr")
 
-            # Simulate top supplier loss
             top = top_supplier(data["trade_matrix_mirror"], country, commodity)
             scores["top_supplier"] = top["top_supplier"]
             scores["top_supplier_share"] = top["top_supplier_share"]
-            scores["risk_external_sim"] = external_risk(
-                data["trade_matrix_mirror"], country, commodity,
-                without=scores["top_supplier"])
-            shocked = shocked_weights(scores)
-            scores["w_internal_sim"] = shocked["w_internal_sim"]
-            scores["w_external_sim"] = shocked["w_external_sim"]
-            scores["vulnerability_weighted_sim"] = vulnerability_score(
-                scores, "w_internal_sim", "w_external_sim", "risk_external_sim")
-            scores["food_risk_weighted_sim"] = food_risk(
-                scores, "vulnerability_weighted_sim")
             scores = pd.concat([scores, averaged_scores(scores)])
             tables.append(scores.assign(country=country, commodity=commodity))
 
