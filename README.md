@@ -1,5 +1,7 @@
 # Food Security Risk Score
 
+Website: https://ekaprok.github.io/food-risk-score/
+
 ## Setup
 
 You need Python 3.9 or newer and pandas.
