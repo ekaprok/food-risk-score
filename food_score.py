@@ -18,7 +18,7 @@ DATASETS = {
     "trade_matrix_mirror": f"{DATA_DIR}/TradeMatrix.csv",
 }
 
-COUNTRIES = ("Afghanistan", "Yemen")
+COUNTRIES = ("Afghanistan", "Yemen", "Egypt", "Qatar", "Singapore", "Somalia", "Sudan", "Tunisia")
 # What each commodity is called in the files it appears in: the crop and trade
 # files go by the CPC name, the food balance sheets by FBS.
 COMMODITIES = {
@@ -51,14 +51,17 @@ def load(path: str) -> pd.DataFrame:
     return df.apply(lambda col: col.str.strip())
 
 
-def rows_for_pair(df: pd.DataFrame, country: str, commodity: str) -> pd.DataFrame:
-    """The rows of a FAOSTAT file covering one country and one commodity."""
+def rows_for_pair(df: pd.DataFrame, country: str, commodity: str,
+                  required: bool = True) -> pd.DataFrame:
+    """The rows of a FAOSTAT file covering one country and one commodity.
+    `required` False returns the empty selection instead of throwing, for the
+    files where absence is itself the reading."""
     missing_columns = {"Area", "Item"} - set(df.columns)
     if missing_columns:
         raise ValueError(f"expected FAOSTAT column(s) missing: {sorted(missing_columns)}")
 
     selected = df[(df["Area"] == country) & (df["Item"] == commodity)]
-    if selected.empty:
+    if selected.empty and required:
         raise ValueError(f"no rows for {country} / {commodity}")
     return selected
 
@@ -130,10 +133,17 @@ def validate_and_get_series(df: pd.DataFrame, dataset: str, element: str,
 def build_supply_balance(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     """Year-indexed production, imports, exports and apparent supply."""
     production_years = (YEARS[0] - RISK_WINDOW + 1, YEARS[1])
-    supply_balance = pd.DataFrame({
-        "production": validate_and_get_series(
+    if data["production"].empty:
+        print("  read an absent production series as a zero harvest")
+        production = pd.Series(
+            0.0, index=range(production_years[0], production_years[1] + 1),
+            name="Production")
+    else:
+        production = validate_and_get_series(
             data["production"], "production", "Production", production_years,
-            MISSING_YEAR_POLICY["production"]),
+            MISSING_YEAR_POLICY["production"])
+    supply_balance = pd.DataFrame({
+        "production": production,
         "imports": validate_and_get_series(
             data["trade"], "trade", "Import quantity", YEARS,
             MISSING_YEAR_POLICY["imports"]),
@@ -178,7 +188,10 @@ def internal_risk(supply_balance: pd.DataFrame) -> pd.Series:
     years, one figure for each year in YEARS: how much the harvest moved about
     in the five years up to and including that year."""
     window = supply_balance["production"].rolling(RISK_WINDOW)
-    coefficient_of_variation = window.std(ddof=1) / window.mean()
+    mean = window.mean()
+    # A zero harvest across the window would divide 0 by 0; it moved about not
+    # at all, so the risk it carries is zero.
+    coefficient_of_variation = (window.std(ddof=1) / mean).mask(mean == 0, 0.0)
     return coefficient_of_variation.loc[YEARS[0]:YEARS[1]].rename("risk_internal")
 
 
@@ -286,10 +299,21 @@ def shocked_weights(scores: pd.DataFrame) -> pd.DataFrame:
                          "w_external_sim": imports / inflows})
 
 
+# Wheat criticality for countries the calories dataset does not cover.
+FALLBACK_WHEAT_CRITICALITY = {
+    "Somalia": 0.40,   # Proxy: Horn of Africa average
+    "Sudan": 0.35,     # Proxy: East African / North African blend
+    "Singapore": 0.18, # Proxy: Wealthy Southeast Asian average
+}
 def commodity_criticality(calories: pd.DataFrame, country: str,
                           commodity: str) -> pd.Series:
     """How essential the commodity is to the nation's diet, per year over
     YEARS."""
+    if commodity == "Wheat" and country in FALLBACK_WHEAT_CRITICALITY:
+        return pd.Series(FALLBACK_WHEAT_CRITICALITY[country],
+                         index=range(YEARS[0], YEARS[1] + 1),
+                         name="criticality", dtype=float)
+
     element = "Food supply (kcal/capita/day)"
     item = COMMODITIES[commodity]["fbs"]
 
@@ -462,7 +486,8 @@ def main() -> pd.DataFrame:
                   "simulation included")
 
             pair = {name: rows_for_pair(data[name], country,
-                                        COMMODITIES[commodity]["cpc"])
+                                        COMMODITIES[commodity]["cpc"],
+                                        required=(name != "production"))
                     for name in ("production", "trade")}
             supply_balance = build_supply_balance(pair)
             scores = supply_ratios(supply_balance)
