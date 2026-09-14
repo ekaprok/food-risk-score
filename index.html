@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Food security risk score</title>
+<title>Food Security Risk Score</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <!-- Global filters: one row, pinned to the top, scoping the whole page. -->
 <header class="topbar">
-  <h1>Food security risk score</h1>
+  <h1>Food Security Risk Score</h1>
   <div class="filters">
     <label>Country
       <select id="country-select"></select>
@@ -71,6 +71,104 @@
   </section>
 
 </main>
+
+<!-- Static methodology: every formula the CSV is built from, in the order
+     food_score.py applies them. Nothing here depends on the loaded data. -->
+<section class="panel method">
+  <h2>How Food Security Risk Score is calculated</h2>
+
+  <h3>Where the Data Comes From</h3>
+  <p>All metrics are built from four public FAOSTAT (Food and Agriculture
+  Organization) datasets:</p>
+  <ul class="sources">
+    <li><a href="https://www.fao.org/faostat/en/#data/QCL"><strong>Production</strong></a>:
+      Tracks domestic harvest quantities (<code>P</code>).</li>
+    <li><a href="https://www.fao.org/faostat/en/#data/TCL"><strong>National Trade</strong></a>:
+      Tracks total national imports (<code>I</code>) and exports
+      (<code>E</code>).</li>
+    <li><a href="https://www.fao.org/faostat/en/#data/TM"><strong>Bilateral Trade Matrix</strong></a>:
+      Tracks shipment volumes between specific trading partners, used to
+      measure supplier concentration.</li>
+    <li><a href="https://www.fao.org/faostat/en/#data/FBS"><strong>Food Balances</strong></a>:
+      Tracks daily per-capita calorie intake to assess how central a crop is to
+      the national diet.</li>
+  </ul>
+  <p>Scores cover 2020&ndash;2024. Every figure below is per country, per crop,
+  per year.</p>
+
+  <h3>The risk score</h3>
+  <ol class="steps">
+    <li>
+      <p class="step-name">Supply balance</p>
+      <p class="formula">Supply = P + I &minus; E</p>
+      <p>Production plus imports less exports, in tonnes.</p>
+    </li>
+    <li>
+      <p class="step-name">Weights</p>
+      <p class="formula">W_internal = P / (P + I)<br>W_external = I / (P + I)</p>
+      <p>Weights are calculated as a share of total inflows (production + imports).</p>
+    </li>
+    <li>
+      <p class="step-name">Internal risk — how unsteady the harvest is</p>
+      <p class="formula">Risk_internal = std(P) / mean(P)</p>
+      <p>The coefficient of variation of production over the trailing five
+      years, including the current one. 0 means the harvest never moves; the
+      larger it gets, the more production swings year to year.</p>
+    </li>
+    <li>
+      <p class="step-name">External risk — how concentrated the suppliers are</p>
+      <p class="formula">Risk_external = &sum; s_i&sup2;</p>
+      <p>A Herfindahl&ndash;Hirschman index, where <code>s_i</code> is supplier
+      <em>i</em>'s share of the flows the trade matrix records that year. It is
+      1/n when n suppliers ship equal amounts, and 1.0 when one supplier ships
+      everything — so losing it is high risk.</p>
+    </li>
+    <li>
+      <p class="step-name">Criticality — how much the population relies on the commodity</p>
+      <p class="formula">Criticality = Kcal_commodity / Kcal_total</p>
+    </li>
+    <li>
+      <p class="step-name">Vulnerability</p>
+      <p class="formula">V = W_internal &times; Risk_internal
+        + W_external &times; Risk_external</p>
+      <p>The two risks, each weighted by how much of the inflow it governs.</p>
+    </li>
+    <li>
+      <p class="step-name">The headline score</p>
+      <p class="formula">Food risk = V &times; Criticality</p>
+      <p>Vulnerability scaled by how much the diet depends on the crop.</p>
+    </li>
+  </ol>
+
+  <h3>The supplier shock simulation</h3>
+  <p>The simulation asks one question: what if the single biggest supplier
+  stopped shipping entirely?</p>
+  <ol class="steps">
+    <li>
+      <p class="step-name">The biggest supplier's share</p>
+      <p class="formula">s_max = Volume_max / Volume_tracked</p>
+      <p>The largest supplier's volume over all volume the trade matrix records
+      for that year.</p>
+    </li>
+    <li>
+      <p class="step-name">Shock exposure</p>
+      <p class="formula">Shock_exposure = W_external &times; s_max
+        &times; Shock_magnitude</p>
+      <p>The exact share of supply lost during a disruption. <code>Shock_magnitude</code>
+        defaults to 1.0 to represent a total supplier collapse, but can be lowered to simulate partial supply chain cuts.</p>
+    </li>
+    <li>
+      <p class="step-name">Simulated vulnerability</p>
+      <p class="formula">V_sim = V + (1 &minus; V) &times; Shock_exposure</p>
+    </li>
+    <li>
+      <p class="step-name">The simulated score</p>
+      <p class="formula">Food risk (simulated) = V_sim &times; Criticality</p>
+      <p>Scaled by the same criticality, so it can be read directly against the
+      score on the left.</p>
+    </li>
+  </ol>
+</section>
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>

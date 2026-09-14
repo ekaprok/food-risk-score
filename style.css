@@ -13,6 +13,7 @@
   --series-2:       #eb6834;  /* simulated risk */
   --series-3:       #1baf7a;  /* third supplier slice */
   --series-other:   #898781;  /* everyone outside the top three */
+  --link:           #1a5fb4;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -29,6 +30,7 @@
     --series-2:       #d95926;
     --series-3:       #199e70;
     --series-other:   #898781;
+    --link:           #3987e5;
   }
 }
 
@@ -127,7 +129,7 @@ body {
 
 .panel h2 {
   margin: 0 0 16px;
-  font-size: 21px;
+  font-size: 24px;
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -230,4 +232,85 @@ figcaption {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
+}
+
+/* --------------------------------------------------------- how it is worked out */
+
+/* Full width under the two columns, so the formulas are not squeezed into
+   half the page. The prose is capped instead, because a 20px line running the
+   whole width of a desktop window is hard to track back to the next line. */
+.method {
+  margin-top: 24px;
+}
+
+.method p,
+.method li {
+  max-width: 78ch;
+}
+
+.method h3 {
+  margin: 28px 0 8px;
+  font-size: 21px;
+  font-weight: 600;
+}
+
+.method h3:first-of-type {
+  margin-top: 0;
+}
+
+.method a {
+  color: var(--link);
+}
+
+.method code,
+.formula {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.method code {
+  padding: 1px 4px;
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.sources {
+  margin: 0;
+  padding-left: 22px;
+}
+
+.sources li {
+  padding: 3px 0;
+}
+
+/* Numbered so a step can be pointed at, and so the order the script applies
+   them in is visible. */
+.steps {
+  margin: 0;
+  padding-left: 22px;
+}
+
+.steps > li {
+  margin-bottom: 20px;
+}
+
+.steps > li::marker {
+  color: var(--text-muted);
+}
+
+.step-name {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* The formula is set off from the sentence explaining it: the reader should be
+   able to find it without reading the paragraph. */
+.formula {
+  margin: 6px 0;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  border-left: 2px solid var(--border);
+  border-radius: 4px;
+  font-size: 17px;
+  line-height: 1.7;
 }
