@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Food security risk score</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Global filters: one row, pinned to the top, scoping the whole page. -->
+<header class="topbar">
+  <h1>Food security risk score</h1>
+  <div class="filters">
+    <label>Country
+      <select id="country-select"></select>
+    </label>
+    <label>Commodity
+      <select id="commodity-select"></select>
+    </label>
+  </div>
+</header>
+
+<p id="status" class="status">Loading the data…</p>
+
+<main id="view" class="split" hidden>
+
+  <!-- LEFT: what the score actually is today. -->
+  <section class="panel">
+    <h2>Current reality</h2>
+
+    <div class="score-card" id="baseline-card">
+      <p class="score-label">Current risk score · <span id="baseline-year"></span></p>
+      <p class="score-value" id="baseline-score"></p>
+      <p class="score-band">
+        <span class="band-icon" id="baseline-band-icon"></span>
+        <span id="baseline-band-label"></span>
+      </p>
+    </div>
+
+    <figure>
+      <figcaption>Risk over the last five years</figcaption>
+      <div class="chart"><canvas id="baseline-chart"></canvas></div>
+      <p class="note">Five-year average: <strong id="baseline-average"></strong></p>
+    </figure>
+
+    <figure>
+      <figcaption>Where the imports came from · <span id="donut-year"></span></figcaption>
+      <div class="chart chart--donut" id="donut-holder"><canvas id="supplier-chart"></canvas></div>
+      <ul class="legend" id="supplier-legend"></ul>
+    </figure>
+  </section>
+
+  <!-- RIGHT: the same five years, with the biggest supplier removed. -->
+  <section class="panel">
+    <h2>What if the biggest supplier stopped shipping?</h2>
+
+    <div class="score-card" id="shock-card">
+      <p class="score-label">Simulated risk score · <span id="shock-year"></span></p>
+      <p class="score-value" id="shock-score"></p>
+      <p class="score-band">
+        <span class="band-icon" id="shock-band-icon"></span>
+        <span id="shock-band-label"></span>
+      </p>
+      <p class="score-sub" id="shock-subhead"></p>
+    </div>
+
+    <figure>
+      <figcaption>Simulated risk over the same five years</figcaption>
+      <div class="chart"><canvas id="shock-chart"></canvas></div>
+      <p class="note">Five-year average: <strong id="shock-average"></strong></p>
+    </figure>
+  </section>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>

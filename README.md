@@ -130,6 +130,33 @@ The following parameters can be configured:
   `CARRY_FORWARD` repeats the previous year. A year with no supplier rows in
   the trade matrix therefore scores an external risk of 0.
 
+## The web page
+
+`index.html`, `style.css` and `app.js` are a static page that reads
+`food_score.csv` in the browser. There is nothing to build and no server code:
+GitHub Pages can serve the repository root as it stands (Settings -> Pages ->
+Deploy from a branch -> `main` / `/ (root)`).
+
+To look at it locally, serve the folder — opening the file directly will not
+work, because the browser refuses to read the CSVs off `file://`:
+
+```bash
+python3 -m http.server 8000
+```
+
+Then open <http://localhost:8000/>.
+
+Pick a country and a commodity at the top and the whole page follows. The left
+column is the country as it is: the latest year's `food_risk_weighted`, the
+five-year trend, the five-year average, and a breakdown of who actually shipped
+the crop that year, summed live from `faostat/TradeMatrix.csv`. The right column
+is the same five years with the biggest supplier removed, from
+`food_risk_weighted_sim`. Both trends share one y-axis, so the two columns can
+be read against each other. Every score shown is banded: green to 0.10, yellow
+to 0.20, red above it.
+
+Re-run `food_score.py` and the page picks up the new CSV on the next reload.
+
 ## Tests
 
 ```bash

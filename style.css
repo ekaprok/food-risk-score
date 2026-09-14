@@ -1,0 +1,247 @@
+/* Colours are named once here, in light and dark, and everything else uses the
+   names. The chart colours are read back out of these variables by app.js. */
+:root {
+  color-scheme: light;
+  --page:           #f9f9f7;
+  --surface-1:      #fcfcfb;
+  --text-primary:   #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted:     #898781;
+  --gridline:       #e1e0d9;
+  --border:         rgba(11, 11, 11, 0.10);
+  --series-1:       #2a78d6;  /* current risk */
+  --series-2:       #eb6834;  /* simulated risk */
+  --series-3:       #1baf7a;  /* third supplier slice */
+  --series-other:   #898781;  /* everyone outside the top three */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page:           #0d0d0d;
+    --surface-1:      #1a1a19;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --border:         rgba(255, 255, 255, 0.10);
+    --series-1:       #3987e5;
+    --series-2:       #d95926;
+    --series-3:       #199e70;
+    --series-other:   #898781;
+  }
+}
+
+/* Risk bands: green to 0.10, yellow to 0.20, red above it. Fixed in both modes
+   because they mean a state, not a series, and they always travel with a shape
+   as well as a colour, so the band never rests on colour alone. */
+:root {
+  --band-low:      #0ca30c;
+  --band-moderate: #fab219;
+  --band-high:     #d03b3b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0 24px 48px;
+  background: var(--page);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* ---------------------------------------------------------------- top bar */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 32px;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 20px 0 16px;
+  background: var(--page);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.filters {
+  display: flex;
+  gap: 16px;
+}
+
+.filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.filters select {
+  min-width: 160px;
+  padding: 6px 8px;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 14px;
+}
+
+.status {
+  margin: 32px 0;
+  color: var(--text-secondary);
+}
+
+/* ------------------------------------------------------------ the columns */
+
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 24px;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .split { grid-template-columns: 1fr; }
+}
+
+.panel {
+  padding: 20px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.panel h2 {
+  margin: 0 0 16px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* -------------------------------------------------------- the big numbers */
+
+/* The band colour washes the card and marks its edge; the number itself stays
+   in ink, because the lighter band colours are not legible as text. */
+.score-card {
+  padding: 16px;
+  border-radius: 8px;
+  border-left: 4px solid var(--band, var(--text-muted));
+  background: color-mix(in srgb, var(--band, var(--text-muted)) 10%, var(--surface-1));
+}
+
+.score-label {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.score-value {
+  margin: 4px 0 0;
+  font-size: 44px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.score-band {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.score-sub {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.band-icon {
+  color: var(--band, var(--text-muted));
+  font-size: 12px;
+}
+
+/* A score shown inline: the shape carries the band, the number stays in ink
+   (yellow is not legible as text on either surface). */
+.risk {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ----------------------------------------------------------- the charts */
+
+figure {
+  margin: 24px 0 0;
+}
+
+figcaption {
+  margin-bottom: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.chart {
+  position: relative;
+  height: 200px;
+}
+
+.chart--donut {
+  height: 200px;
+  max-width: 220px;
+}
+
+.note {
+  margin: 10px 0 0;
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+
+/* The donut's legend doubles as its labels: every slice is named and valued
+   here, so nothing is readable only by colour. */
+.legend {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  color: var(--text-secondary);
+}
+
+.legend .swatch {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 2px;
+  background: var(--swatch);
+}
+
+.legend .share {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
