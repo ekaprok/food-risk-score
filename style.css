@@ -274,12 +274,12 @@ figcaption {
   font-size: 0.9em;
 }
 
-.sources {
-  margin: 0;
+.method ul {
+  margin: 0 0 12px;
   padding-left: 22px;
 }
 
-.sources li {
+.method ul li {
   padding: 3px 0;
 }
 
