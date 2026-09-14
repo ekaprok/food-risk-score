@@ -49,7 +49,7 @@ body {
   background: var(--page);
   color: var(--text-primary);
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: 15px;
+  font-size: 20px;
   line-height: 1.5;
 }
 
@@ -71,7 +71,7 @@ body {
 
 .topbar h1 {
   margin: 0;
-  font-size: 20px;
+  font-size: 26px;
   font-weight: 600;
 }
 
@@ -84,19 +84,19 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 12px;
+  font-size: 16px;
   color: var(--text-secondary);
 }
 
 .filters select {
-  min-width: 160px;
-  padding: 6px 8px;
+  min-width: 210px;
+  padding: 8px 10px;
   background: var(--surface-1);
   color: var(--text-primary);
   border: 1px solid var(--border);
   border-radius: 6px;
   font: inherit;
-  font-size: 14px;
+  font-size: 18px;
 }
 
 .status {
@@ -127,7 +127,7 @@ body {
 
 .panel h2 {
   margin: 0 0 16px;
-  font-size: 16px;
+  font-size: 21px;
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -145,13 +145,13 @@ body {
 
 .score-label {
   margin: 0;
-  font-size: 12px;
+  font-size: 16px;
   color: var(--text-secondary);
 }
 
 .score-value {
   margin: 4px 0 0;
-  font-size: 44px;
+  font-size: 30px;
   font-weight: 600;
   line-height: 1.1;
 }
@@ -161,29 +161,20 @@ body {
   align-items: center;
   gap: 6px;
   margin: 4px 0 0;
-  font-size: 13px;
+  font-size: 17px;
   color: var(--text-secondary);
 }
 
 .score-sub {
   margin: 12px 0 0;
-  font-size: 13px;
+  white-space: pre-line;   /* the sentence break is a newline in the text itself */
+  font-size: 17px;
   color: var(--text-secondary);
 }
 
 .band-icon {
   color: var(--band, var(--text-muted));
-  font-size: 12px;
-}
-
-/* A score shown inline: the shape carries the band, the number stays in ink
-   (yellow is not legible as text on either surface). */
-.risk {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
+  font-size: 16px;
 }
 
 /* ----------------------------------------------------------- the charts */
@@ -194,25 +185,20 @@ figure {
 
 figcaption {
   margin-bottom: 8px;
-  font-size: 16px;
+  font-size: 21px;
   font-weight: 600;
   color: var(--text-secondary);
 }
 
+/* Tall enough that the doubled axis labels leave a readable plot behind them. */
 .chart {
   position: relative;
-  height: 200px;
+  height: 230px;
 }
 
 .chart--donut {
   height: 200px;
   max-width: 220px;
-}
-
-.note {
-  margin: 10px 0 0;
-  font-size: 16px;
-  color: var(--text-secondary);
 }
 
 /* The donut's legend doubles as its labels: every slice is named and valued
@@ -221,7 +207,7 @@ figcaption {
   margin: 12px 0 0;
   padding: 0;
   list-style: none;
-  font-size: 13px;
+  font-size: 17px;
 }
 
 .legend li {
@@ -233,8 +219,8 @@ figcaption {
 }
 
 .legend .swatch {
-  width: 10px;
-  height: 10px;
+  width: 13px;
+  height: 13px;
   flex: none;
   border-radius: 2px;
   background: var(--swatch);

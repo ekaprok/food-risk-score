@@ -133,13 +133,6 @@ function bandFor(value) {
   return RISK_BANDS.find(function (band) { return value <= band.limit; });
 }
 
-/** A score with its band shown beside it: a coloured shape, then the number. */
-function riskChip(value) {
-  const band = bandFor(value);
-  return '<span class="risk" style="--band: var(' + band.variable + ')" title="' + band.label + '">'
-    + '<span class="band-icon">' + band.icon + '</span>' + format(value) + '</span>';
-}
-
 /** A round axis top that leaves a little headroom above the biggest value. */
 function axisTop(values) {
   const biggest = Math.max.apply(null, values.filter(isFinite));
@@ -149,6 +142,10 @@ function axisTop(values) {
 // ---------------------------------------------------------------------------
 // Drawing
 // ---------------------------------------------------------------------------
+
+// Chart.js draws its own text on the canvas, out of reach of the stylesheet, so
+// its base size is set here to match the doubled type in style.css.
+Chart.defaults.font.size = 16;
 
 /** Replaces whatever is on a canvas with a new chart. */
 function draw(canvasId, config) {
@@ -332,7 +329,6 @@ function render() {
     return row.country === country && row.commodity === commodity;
   });
   const yearRows = rows.filter(function (row) { return row.year !== 'AVERAGES'; });
-  const averagesRow = rows.find(function (row) { return row.year === 'AVERAGES'; });
   if (!yearRows.length) return;
 
   const latest = yearRows[yearRows.length - 1];
@@ -340,24 +336,25 @@ function render() {
   const baseline = yearRows.map(function (row) { return score(row, 'risk'); });
   const shocked = yearRows.map(function (row) { return score(row, 'riskSim'); });
 
-  fillScoreCard('baseline', score(latest, 'risk'), latest.year);
-  fillScoreCard('shock', score(latest, 'riskSim'), latest.year);
+  const baselineLatest = score(latest, 'risk');
+  const shockLatest = score(latest, 'riskSim');
+
+  fillScoreCard('baseline', baselineLatest, latest.year);
+  fillScoreCard('shock', shockLatest, latest.year);
 
   document.getElementById('shock-subhead').textContent =
-    'If the largest supplier (' + latest[columns.topSupplier] + ') stopped shipping. '
-    + 'It covered ' + formatShare(score(latest, 'topShare'))
-    + ' of the flows on record in ' + latest.year + '.';
+    latest[columns.topSupplier] + ' supplies ' + formatShare(score(latest, 'topShare'))
+    + ' of ' + country + '\u2019s recorded ' + commodity + ' imports. ' + '\n'
+    + 'If ' + latest[columns.topSupplier] + ' stopped providing ' + commodity + ', '
+    + 'vulnerability would change from '
+    + format(baselineLatest) + ' (' + bandFor(baselineLatest).label + ')'
+    + ' to ' + format(shockLatest) + ' (' + bandFor(shockLatest).label + ').';
 
   // One axis top for both trends, so the two columns can be read against
   // each other rather than each against its own scale.
   const top = axisTop(baseline.concat(shocked));
   drawTrend('baseline-chart', years, baseline, css('--series-1'), top);
   drawTrend('shock-chart', years, shocked, css('--series-2'), top);
-
-  if (averagesRow) {
-    document.getElementById('baseline-average').innerHTML = riskChip(score(averagesRow, 'risk'));
-    document.getElementById('shock-average').innerHTML = riskChip(score(averagesRow, 'riskSim'));
-  }
 
   drawSuppliers(suppliersFor(country, commodity, latest.year), latest.year);
 }
