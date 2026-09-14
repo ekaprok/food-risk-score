@@ -410,6 +410,40 @@ class TestTopSupplier(YearsCase):
         self.assertEqual(biggest["top_supplier_share"].loc[2022], 0.0)
 
 
+class TestShockExposure(unittest.TestCase):
+    """The share of the inflows riding on the biggest supplier."""
+
+    SCORES = pd.DataFrame(
+        {"w_external": [0.8, 0.5, 0.25], "top_supplier_share": [0.5, 1.0, 0.0]},
+        index=[2020, 2021, 2022], dtype=float)
+
+    def setUp(self):
+        self._saved = food_score.SHOCK_MAGNITUDE
+
+    def tearDown(self):
+        food_score.SHOCK_MAGNITUDE = self._saved
+
+    def test_it_multiplies_the_import_share_by_the_supplier_share(self):
+        self.assertEqual(self._saved, 1.0,
+                         "the default shock is a total disappearance")
+        exposure = food_score.shock_exposure(self.SCORES)
+
+        self.assertEqual(list(exposure.index), [2020, 2021, 2022])
+        self.assertAlmostEqual(exposure.loc[2020], 0.8 * 0.5)
+        # A sole supplier of everything imported: the whole import share goes.
+        self.assertAlmostEqual(exposure.loc[2021], 0.5)
+        # A year with no tracked supplier has nothing to lose.
+        self.assertAlmostEqual(exposure.loc[2022], 0.0)
+
+        # A partial cut takes the same fraction of the exposure with it.
+        food_score.SHOCK_MAGNITUDE = 0.5
+        halved = food_score.shock_exposure(self.SCORES)
+
+        self.assertAlmostEqual(halved.loc[2020], 0.8 * 0.5 * 0.5)
+        self.assertAlmostEqual(halved.loc[2021], 0.25)
+        self.assertAlmostEqual(halved.loc[2022], 0.0)
+
+
 class TestVulnerabilityScore(unittest.TestCase):
 
     SCORES = pd.DataFrame(
@@ -520,7 +554,8 @@ class TestAveragedScores(YearsCase):
          "vulnerability_ssr_idr": [0.26, 0.7],
          "food_risk_weighted": [0.138, 0.13],
          "food_risk_ssr_idr": [0.156, 0.14],
-         "top_supplier_share": [0.5, 0.25]},
+         "top_supplier_share": [0.5, 0.25],
+         "shock_exposure": [0.045, 0.125]},
         index=pd.Index([2020, 2021], name="year"), dtype=float)
 
     def test_it_summarises_the_span_in_one_row(self):
@@ -538,6 +573,11 @@ class TestAveragedScores(YearsCase):
         self.assertAlmostEqual(row["risk_external"], 0.7)
         self.assertAlmostEqual(row["criticality"], 0.4)
         self.assertAlmostEqual(row["top_supplier_share"], 0.375)
+
+        # Rebuilt from this row's averages, not the mean of the two years.
+        self.assertAlmostEqual(row["shock_exposure"], 0.3 * 0.375)
+        self.assertNotAlmostEqual(row["shock_exposure"],
+                                  self.SCORES["shock_exposure"].mean())
 
         # The last year's window, not the mean of the two.
         self.assertAlmostEqual(row["risk_internal"], 0.4)

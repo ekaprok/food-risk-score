@@ -30,6 +30,9 @@ COMMODITIES = {
 YEARS = (2020, 2024)
 # Sliding window for internal risk calculation.
 RISK_WINDOW = 5
+# How much of the top supplier's flow the shock takes: 1.0 simulates it
+# disappearing outright. Lower it to model a partial cut instead.
+SHOCK_MAGNITUDE = 1.0
 
 # What an absent year means for each series.
 FILL_ZERO = "fill_zero"
@@ -269,6 +272,13 @@ def top_supplier(trade_matrix: pd.DataFrame, country: str,
         "top_supplier_share": by_year.max() / by_year.sum(),
     }).reindex(span).fillna({"top_supplier_share": 0.0})
 
+def shock_exposure(scores: pd.DataFrame) -> pd.Series:
+    """How much of the country's inflows the top supplier accounts for, per
+    year over YEARS: W_external x s_max x SHOCK_MAGNITUDE."""
+    return (scores["w_external"] * scores["top_supplier_share"]
+            * SHOCK_MAGNITUDE)
+
+
 def vulnerability_score(scores: pd.DataFrame, internal: str,
                         external: str) -> pd.Series:
     """How exposed the country is on this commodity, per year over YEARS: each
@@ -333,6 +343,7 @@ def averaged_scores(scores: pd.DataFrame) -> pd.DataFrame:
     summary["vulnerability_ssr_idr"] = vulnerability_score(summary, "ssr", "idr")
     summary["food_risk_weighted"] = food_risk(summary, "vulnerability_weighted")
     summary["food_risk_ssr_idr"] = food_risk(summary, "vulnerability_ssr_idr")
+    summary["shock_exposure"] = shock_exposure(summary)
     summary.index = pd.Index([AVERAGES_LABEL], name=scores.index.name)
     return summary.reindex(columns=scores.columns)
 
@@ -355,6 +366,7 @@ COLUMN_FORMATS = [
     ("food_risk_ssr_idr",      "Food_risk_ssr_idr",      "{:>18.2f}"),
     ("top_supplier",           "Top_supplier",           "{:>24}"),
     ("top_supplier_share",     "Top_supplier_share",     "{:>19.2f}"),
+    ("shock_exposure",         "Shock_exposure",         "{:>15.2f}"),
 ]
 
 CSV_COLUMN_NAMES = {
@@ -381,6 +393,8 @@ CSV_COLUMN_NAMES = {
     "top_supplier":       "top_supplier (biggest supplier by tracked volume)",
     "top_supplier_share":
         "top_supplier_share (s_max = Volume_max / Volume_trade)",
+    "shock_exposure":
+        "shock_exposure (W_external x s_max x Shock_magnitude)",
 }
 
 
@@ -446,6 +460,9 @@ def main() -> pd.DataFrame:
             print("Food_risk_ssr_idr:      Vulnerability_ssr_idr x Criticality")
             print("Top_supplier:           the biggest supplier of the year "
                   "and its share s_max of the tracked flows")
+            print(f"Shock_exposure:         W_external x s_max x "
+                  f"{SHOCK_MAGNITUDE:g}: the share of the inflows that stops "
+                  "arriving if that supplier does")
             print(f"{AVERAGES_LABEL}:               the whole span as one row: "
                   "the ratios and weights averaged over it, both Vulnerability "
                   "and both Food_risk columns built from those")
@@ -470,6 +487,7 @@ def main() -> pd.DataFrame:
             top = top_supplier(data["trade_matrix_mirror"], country, commodity)
             scores["top_supplier"] = top["top_supplier"]
             scores["top_supplier_share"] = top["top_supplier_share"]
+            scores["shock_exposure"] = shock_exposure(scores)
             scores = pd.concat([scores, averaged_scores(scores)])
             tables.append(scores.assign(country=country, commodity=commodity))
 

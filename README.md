@@ -66,6 +66,7 @@ plus an AVERAGES row and a blank separator line after each block.
 | `food_risk_ssr_idr (Vulnerability_ssr_idr x Criticality)` | The same, built on the SSR/IDR vulnerability. | Recalculated the same way. |
 | `top_supplier (biggest supplier by tracked volume)` | The country that shipped the most of the crop that year, as recorded in the trade matrix. | - |
 | `top_supplier_share (s_max = Volume_max / Volume_trade)` | How much of the year's tracked flows that one supplier accounted for. 0.4 means it shipped 40% of everything the matrix records for that year. | The plain average of the yearly values over `YEARS`. |
+| `shock_exposure (W_external x s_max x Shock_magnitude)` | How much of everything coming in (`P + I`) stops arriving if the biggest supplier does. At the default `SHOCK_MAGNITUDE` of 1 the supplier disappears outright. | Recalculated from this row's averaged `w_external` and `s_max`, not averaged from the yearly values. |
 
 ### Which dataset feeds which term
 
@@ -76,9 +77,18 @@ plus an AVERAGES row and a blank separator line after each block.
 | Risk_internal | `Production_WheatRice` | Production |
 | C_kcal | `Calories_TotalAndWheat` | Food supply (kcal/cap/d) |
 | Risk_external, s_max | `Trade_ReporterAll_...` | Export quantity |
+| Shock_exposure | both trade files | see the caveat below |
 
 A year missing from a source file throws an error, unless `MISSING_YEAR_POLICY`
 gives that series another reading.
+
+`shock_exposure` is the one term that crosses the two trade files: `s_max` is
+the supplier's share of the flows the **trade matrix** tracks, while the
+imports behind `w_external` come from the **aggregate** trade file. The two
+totals do not have to agree, so the column takes the matrix's supplier mix as
+representative of the whole of `I`. It uses `w_external` rather than `idr`
+because `I / (P + I)` cannot exceed 1, whereas `I / (P + I - E)` can for a
+country that re-exports more than it uses — Qatar and Singapore both do.
 
 ### Parameters
 
@@ -94,6 +104,9 @@ The following parameters can be configured:
 - `YEARS`: the first and last year to score, inclusive.
 - `RISK_WINDOW`: how many years the internal risk (coefficient of variation of
   production) looks back over, including the current year (default: 5).
+- `SHOCK_MAGNITUDE`: how much of the top supplier's flow `shock_exposure`
+  assumes is lost, as a fraction (default: `1.0`, the supplier disappearing
+  outright).
 - `MISSING_YEAR_POLICY`: how to read a year absent from a source series, one
   setting per series (`production`, `imports`, `exports`, `calories` and
   `suppliers`). `None` raises an error, `FILL_ZERO` reads it as zero, and
