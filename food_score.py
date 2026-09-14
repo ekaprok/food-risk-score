@@ -290,9 +290,9 @@ def vulnerability_score(scores: pd.DataFrame, internal: str,
 
 # Wheat criticality for countries the calories dataset does not cover.
 FALLBACK_WHEAT_CRITICALITY = {
-    "Somalia": 0.40,   # Proxy: Horn of Africa average
-    "Sudan": 0.35,     # Proxy: East African / North African blend
-    "Singapore": 0.18, # Proxy: Wealthy Southeast Asian average
+    "Somalia": 0.32,   # Djibouti for 2023; 865.15 / 2720.97
+    "Sudan": 0.32,     # Djibouti for 2023; 865.15 / 2720.97
+    "Singapore": 0.11, # Korea for 2023; 388.92 / 3430.35
 }
 def commodity_criticality(calories: pd.DataFrame, country: str,
                           commodity: str) -> pd.Series:
