@@ -326,6 +326,12 @@ def food_risk(scores: pd.DataFrame, vulnerability: str) -> pd.Series:
     this only multiplies them."""
     return scores[vulnerability] * scores["criticality"]
 
+def simulated_vulnerability(scores: pd.DataFrame) -> pd.Series:
+    """The vulnerability once the biggest supplier stops shipping, per year
+    over YEARS: V + (1 - V) x Shock_exposure."""
+    vulnerability = scores["vulnerability_weighted"]
+    return vulnerability + (1 - vulnerability) * scores["shock_exposure"]
+
 AVERAGES_LABEL = "AVERAGES"
 AVERAGED_COLUMNS = ["ssr", "idr", "w_internal", "w_external", "risk_external",
                     "criticality", "top_supplier_share"]
@@ -340,10 +346,12 @@ def averaged_scores(scores: pd.DataFrame) -> pd.DataFrame:
     summary["risk_internal"] = scores["risk_internal"].loc[YEARS[1]]
     summary["vulnerability_weighted"] = vulnerability_score(
         summary, "w_internal", "w_external")
-    summary["vulnerability_ssr_idr"] = vulnerability_score(summary, "ssr", "idr")
+    # summary["vulnerability_ssr_idr"] = vulnerability_score(summary, "ssr", "idr")
     summary["food_risk_weighted"] = food_risk(summary, "vulnerability_weighted")
-    summary["food_risk_ssr_idr"] = food_risk(summary, "vulnerability_ssr_idr")
+    # summary["food_risk_ssr_idr"] = food_risk(summary, "vulnerability_ssr_idr")
     summary["shock_exposure"] = shock_exposure(summary)
+    summary["vulnerability_weighted_sim"] = simulated_vulnerability(summary)
+    summary["food_risk_weighted_sim"] = food_risk(summary, "vulnerability_weighted_sim")
     summary.index = pd.Index([AVERAGES_LABEL], name=scores.index.name)
     return summary.reindex(columns=scores.columns)
 
@@ -361,12 +369,14 @@ COLUMN_FORMATS = [
     ("risk_external", "Risk_external",  "{:>14.2f}"),
     ("criticality",   "Criticality",    "{:>12.2f}"),
     ("vulnerability_weighted", "Vulnerability_weighted", "{:>23.2f}"),
-    ("vulnerability_ssr_idr",  "Vulnerability_ssr_idr",  "{:>22.2f}"),
+    # ("vulnerability_ssr_idr",  "Vulnerability_ssr_idr",  "{:>22.2f}"),
     ("food_risk_weighted",     "Food_risk_weighted",     "{:>19.2f}"),
-    ("food_risk_ssr_idr",      "Food_risk_ssr_idr",      "{:>18.2f}"),
+    # ("food_risk_ssr_idr",      "Food_risk_ssr_idr",      "{:>18.2f}"),
     ("top_supplier",           "Top_supplier",           "{:>24}"),
     ("top_supplier_share",     "Top_supplier_share",     "{:>19.2f}"),
     ("shock_exposure",         "Shock_exposure",         "{:>15.2f}"),
+    ("vulnerability_weighted_sim", "Vulnerability_weighted_sim", "{:>27.2f}"),
+    ("food_risk_weighted_sim",     "Food_risk_weighted_sim",     "{:>23.2f}"),
 ]
 
 CSV_COLUMN_NAMES = {
@@ -384,17 +394,21 @@ CSV_COLUMN_NAMES = {
     "vulnerability_weighted":
         "vulnerability_weighted (W_internal x Risk_internal "
         "+ W_external x Risk_external)",
-    "vulnerability_ssr_idr":
-        "vulnerability_ssr_idr (SSR x Risk_internal + IDR x Risk_external)",
+    # "vulnerability_ssr_idr":
+    #     "vulnerability_ssr_idr (SSR x Risk_internal + IDR x Risk_external)",
     "food_risk_weighted":
         "food_risk_weighted (Vulnerability_weighted x Criticality)",
-    "food_risk_ssr_idr":
-        "food_risk_ssr_idr (Vulnerability_ssr_idr x Criticality)",
+    # "food_risk_ssr_idr":
+    #     "food_risk_ssr_idr (Vulnerability_ssr_idr x Criticality)",
     "top_supplier":       "top_supplier (biggest supplier by tracked volume)",
     "top_supplier_share":
         "top_supplier_share (s_max = Volume_max / Volume_trade)",
     "shock_exposure":
         "shock_exposure (W_external x s_max x Shock_magnitude)",
+    "vulnerability_weighted_sim":
+        "vulnerability_weighted_sim (V + (1 - V) x Shock_exposure)",
+    "food_risk_weighted_sim":
+        "food_risk_weighted_sim (Vulnerability_weighted_sim x Criticality)",
 }
 
 
@@ -446,26 +460,29 @@ def main() -> pd.DataFrame:
         for commodity in sorted(COMMODITIES):
             print("=" * 132)
             print(f"{country.upper()} / {commodity.upper()}  ({YEARS[0]}-{YEARS[1]})")
-            print(f"Risk_internal:          CV of production over a trailing "
+            print(f"Risk_internal:              CV of production over a trailing "
                   f"{RISK_WINDOW}-year window")
-            print("Risk_external:          HHI of import-supplier concentration "
+            print("Risk_external:              HHI of import-supplier concentration "
                   "(1/n spread out, 1.0 a single supplier)")
-            print("Criticality:            the commodity's share of the national "
+            print("Criticality:                the commodity's share of the national "
                   "calorie supply")
-            print("Vulnerability_weighted: W_internal x Risk_internal "
+            print("Vulnerability_weighted:     W_internal x Risk_internal "
                   "+ W_external x Risk_external")
-            print("Vulnerability_ssr_idr:  SSR x Risk_internal "
-                  "+ IDR x Risk_external")
-            print("Food_risk_weighted:     Vulnerability_weighted x Criticality")
-            print("Food_risk_ssr_idr:      Vulnerability_ssr_idr x Criticality")
-            print("Top_supplier:           the biggest supplier of the year "
+            # print("Vulnerability_ssr_idr:      SSR x Risk_internal "
+            #       "+ IDR x Risk_external")
+            print("Food_risk_weighted:         Vulnerability_weighted x Criticality")
+            # print("Food_risk_ssr_idr:          Vulnerability_ssr_idr x Criticality")
+            print("Top_supplier:               the biggest supplier of the year "
                   "and its share s_max of the tracked flows")
-            print(f"Shock_exposure:         W_external x s_max x "
+            print(f"Shock_exposure:             W_external x s_max x "
                   f"{SHOCK_MAGNITUDE:g}: the share of the inflows that stops "
                   "arriving if that supplier does")
-            print(f"{AVERAGES_LABEL}:               the whole span as one row: "
-                  "the ratios and weights averaged over it, both Vulnerability "
-                  "and both Food_risk columns built from those")
+            print("Vulnerability_weighted_sim: Vulnerability_weighted topped up by "
+                  "the shock: V + (1 - V) x Shock_exposure")
+            print("Food_risk_weighted_sim:     Vulnerability_weighted_sim x Criticality")
+            print(f"{AVERAGES_LABEL}:                   the whole span as one row: "
+                  "the ratios and weights averaged over it, the Vulnerability "
+                  "and Food_risk columns built from those")
 
             pair = {name: rows_for_pair(data[name], country,
                                         COMMODITIES[commodity]["cpc"],
@@ -480,14 +497,17 @@ def main() -> pd.DataFrame:
                 data["calories"], country, commodity)
             scores["vulnerability_weighted"] = vulnerability_score(
                 scores, "w_internal", "w_external")
-            scores["vulnerability_ssr_idr"] = vulnerability_score(scores, "ssr", "idr")
+            # scores["vulnerability_ssr_idr"] = vulnerability_score(scores, "ssr", "idr")
             scores["food_risk_weighted"] = food_risk(scores, "vulnerability_weighted")
-            scores["food_risk_ssr_idr"] = food_risk(scores, "vulnerability_ssr_idr")
+            # scores["food_risk_ssr_idr"] = food_risk(scores, "vulnerability_ssr_idr")
 
             top = top_supplier(data["trade_matrix_mirror"], country, commodity)
             scores["top_supplier"] = top["top_supplier"]
             scores["top_supplier_share"] = top["top_supplier_share"]
             scores["shock_exposure"] = shock_exposure(scores)
+            scores["vulnerability_weighted_sim"] = simulated_vulnerability(scores)
+            scores["food_risk_weighted_sim"] = food_risk(
+                scores, "vulnerability_weighted_sim")
             scores = pd.concat([scores, averaged_scores(scores)])
             tables.append(scores.assign(country=country, commodity=commodity))
 

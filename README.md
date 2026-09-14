@@ -61,12 +61,18 @@ plus an AVERAGES row and a blank separator line after each block.
 | `risk_external (sum(si^2))` | How concentrated the country's suppliers are, as a Herfindahl-Hirschman index. Near 0 means imports are spread over many countries; 1.0 means a single supplier provides everything, so losing it would cut the whole flow. | The plain average of the yearly values over `YEARS`. |
 | `criticality (Kcal_commodity / Kcal_total)` | How much the national diet relies on the crop. | The plain average of the yearly values over `YEARS`. |
 | `vulnerability_weighted (W_internal x Risk_internal + W_external x Risk_external)` | How exposed the country is, splitting the score over the inflows (`P + I`), so the weights sum to 1 whatever it exports. | Recalculated from the averaged figures in this row, not averaged from the yearly vulnerabilities. |
-| `vulnerability_ssr_idr (SSR x Risk_internal + IDR x Risk_external)` | The same exposure, weighted over apparent supply instead. The two are reported side by side so the choice of weighting is visible rather than assumed. | Recalculated the same way. |
 | `food_risk_weighted (Vulnerability_weighted x Criticality)` | The headline figure: vulnerability scaled by how much the diet depends on the crop. | Recalculated too, as this row's vulnerability times this row's criticality. |
-| `food_risk_ssr_idr (Vulnerability_ssr_idr x Criticality)` | The same, built on the SSR/IDR vulnerability. | Recalculated the same way. |
 | `top_supplier (biggest supplier by tracked volume)` | The country that shipped the most of the crop that year, as recorded in the trade matrix. | - |
 | `top_supplier_share (s_max = Volume_max / Volume_trade)` | How much of the year's tracked flows that one supplier accounted for. 0.4 means it shipped 40% of everything the matrix records for that year. | The plain average of the yearly values over `YEARS`. |
 | `shock_exposure (W_external x s_max x Shock_magnitude)` | How much of everything coming in (`P + I`) stops arriving if the biggest supplier does. At the default `SHOCK_MAGNITUDE` of 1 the supplier disappears outright. | Recalculated from this row's averaged `w_external` and `s_max`, not averaged from the yearly values. |
+| `vulnerability_weighted_sim (V + (1 - V) x Shock_exposure)` | `vulnerability_weighted` topped up by the shock: the exposure takes that fraction of whatever headroom the country had left. A country already fully exposed cannot get worse; one at 0 rises to the exposure itself. Never reads below the standing vulnerability, and never above 1. | Recalculated from this row's `vulnerability_weighted` and `shock_exposure`. |
+| `food_risk_weighted_sim (Vulnerability_weighted_sim x Criticality)` | The headline figure with the biggest supplier gone: the simulated vulnerability scaled by how much the diet depends on the crop. Read against `food_risk_weighted` to see what the shock costs. | Recalculated as this row's simulated vulnerability times this row's criticality. |
+
+Two more columns, `vulnerability_ssr_idr` and `food_risk_ssr_idr`, are
+commented out in `food_score.py` and so no longer reach the CSV. They weighted
+the same two risks over apparent supply (`SSR`/`IDR`) rather than over the
+inflows, and were reported beside the `_weighted` pair so the choice of
+weighting stayed visible. Uncomment them there to bring both back.
 
 ### Which dataset feeds which term
 
@@ -89,6 +95,12 @@ totals do not have to agree, so the column takes the matrix's supplier mix as
 representative of the whole of `I`. It uses `w_external` rather than `idr`
 because `I / (P + I)` cannot exceed 1, whereas `I / (P + I - E)` can for a
 country that re-exports more than it uses — Qatar and Singapore both do.
+
+`vulnerability_weighted_sim` combines the standing vulnerability and the shock the
+way independent risks combine: `V + (1 - V) x E` is the same as
+`1 - (1 - V)(1 - E)`, so the country comes through unharmed only if both miss
+it. That keeps the result inside 0-1 and monotonic — the shock can only push
+the score up, never down.
 
 ### Parameters
 

@@ -444,6 +444,43 @@ class TestShockExposure(unittest.TestCase):
         self.assertAlmostEqual(halved.loc[2022], 0.0)
 
 
+class TestSimulatedVulnerability(unittest.TestCase):
+    """The standing vulnerability topped up by the shock."""
+
+    SCORES = pd.DataFrame(
+        {"vulnerability_weighted": [0.2, 0.0, 1.0, 0.6],
+         "shock_exposure": [0.5, 0.75, 0.9, 0.0]},
+        index=[2020, 2021, 2022, 2023], dtype=float)
+
+    def test_the_shock_takes_a_share_of_the_headroom_left(self):
+        simulated = food_score.simulated_vulnerability(self.SCORES)
+
+        self.assertEqual(list(simulated.index), [2020, 2021, 2022, 2023])
+        self.assertAlmostEqual(simulated.loc[2020], 0.2 + 0.8 * 0.5)
+        # Nothing standing against it: the exposure is the whole score.
+        self.assertAlmostEqual(simulated.loc[2021], 0.75)
+        # Already fully exposed: the shock cannot make it worse.
+        self.assertAlmostEqual(simulated.loc[2022], 1.0)
+        # No exposure: the standing vulnerability is left where it was.
+        self.assertAlmostEqual(simulated.loc[2023], 0.6)
+
+    def test_it_never_reads_below_the_standing_vulnerability(self):
+        simulated = food_score.simulated_vulnerability(self.SCORES)
+
+        self.assertTrue(
+            (simulated >= self.SCORES["vulnerability_weighted"]).all())
+        self.assertTrue(((simulated >= 0) & (simulated <= 1)).all())
+
+    def test_it_is_the_complement_of_the_two_terms_missing(self):
+        # V + (1 - V) x E written the other way round.
+        simulated = food_score.simulated_vulnerability(self.SCORES)
+        complement = 1 - ((1 - self.SCORES["vulnerability_weighted"])
+                          * (1 - self.SCORES["shock_exposure"]))
+
+        for year in self.SCORES.index:
+            self.assertAlmostEqual(simulated.loc[year], complement.loc[year])
+
+
 class TestVulnerabilityScore(unittest.TestCase):
 
     SCORES = pd.DataFrame(
@@ -518,7 +555,7 @@ class TestFoodRisk(unittest.TestCase):
 
     SCORES = pd.DataFrame(
         {"vulnerability_weighted": [0.2, 0.5],
-         "vulnerability_ssr_idr": [0.3, 0.8],
+         # "vulnerability_ssr_idr": [0.3, 0.8],
          "criticality": [0.6, 0.1]},
         index=[2020, 2021], dtype=float)
 
@@ -530,13 +567,13 @@ class TestFoodRisk(unittest.TestCase):
         self.assertAlmostEqual(first, 0.2 * 0.6)
         self.assertAlmostEqual(second, 0.5 * 0.1)
 
-    def test_food_risk_from_the_ssr_idr_vulnerability(self):
-        score = food_score.food_risk(self.SCORES, "vulnerability_ssr_idr")
-
-        self.assertEqual(list(score.index), [2020, 2021])
-        first, second = score.tolist()
-        self.assertAlmostEqual(first, 0.3 * 0.6)
-        self.assertAlmostEqual(second, 0.8 * 0.1)
+    # def test_food_risk_from_the_ssr_idr_vulnerability(self):
+    #     score = food_score.food_risk(self.SCORES, "vulnerability_ssr_idr")
+    #
+    #     self.assertEqual(list(score.index), [2020, 2021])
+    #     first, second = score.tolist()
+    #     self.assertAlmostEqual(first, 0.3 * 0.6)
+    #     self.assertAlmostEqual(second, 0.8 * 0.1)
 
 
 class TestAveragedScores(YearsCase):
@@ -551,11 +588,13 @@ class TestAveragedScores(YearsCase):
          "risk_internal": [0.2, 0.4], "risk_external": [0.5, 0.9],
          "criticality": [0.6, 0.2],
          "vulnerability_weighted": [0.23, 0.65],
-         "vulnerability_ssr_idr": [0.26, 0.7],
+         # "vulnerability_ssr_idr": [0.26, 0.7],
          "food_risk_weighted": [0.138, 0.13],
-         "food_risk_ssr_idr": [0.156, 0.14],
+         # "food_risk_ssr_idr": [0.156, 0.14],
          "top_supplier_share": [0.5, 0.25],
-         "shock_exposure": [0.045, 0.125]},
+         "shock_exposure": [0.045, 0.125],
+         "vulnerability_weighted_sim": [0.264, 0.694],
+         "food_risk_weighted_sim": [0.158, 0.139]},
         index=pd.Index([2020, 2021], name="year"), dtype=float)
 
     def test_it_summarises_the_span_in_one_row(self):
@@ -585,16 +624,22 @@ class TestAveragedScores(YearsCase):
         for tonnage in ("production", "imports", "exports", "supply"):
             self.assertTrue(pd.isna(row[tonnage]), tonnage)
 
-        # Both pairs are built from the averages above, so none of the four is
-        # the mean of the yearly scores the fixture carries.
+        # Built from the averages above, so none of these is the mean of the
+        # yearly scores the fixture carries.
         weighted = 0.7 * 0.4 + 0.3 * 0.7
-        ssr_idr = 0.6 * 0.4 + 0.4 * 0.7
+        # ssr_idr = 0.6 * 0.4 + 0.4 * 0.7
         self.assertAlmostEqual(row["vulnerability_weighted"], weighted)
-        self.assertAlmostEqual(row["vulnerability_ssr_idr"], ssr_idr)
+        # self.assertAlmostEqual(row["vulnerability_ssr_idr"], ssr_idr)
         self.assertAlmostEqual(row["food_risk_weighted"], weighted * 0.4)
-        self.assertAlmostEqual(row["food_risk_ssr_idr"], ssr_idr * 0.4)
-        for column in ("vulnerability_weighted", "vulnerability_ssr_idr",
-                       "food_risk_weighted", "food_risk_ssr_idr"):
+        # self.assertAlmostEqual(row["food_risk_ssr_idr"], ssr_idr * 0.4)
+
+        # The simulation rides on the two rebuilt figures above, not the
+        # fixture's own simulated columns.
+        simulated = weighted + (1 - weighted) * (0.3 * 0.375)
+        self.assertAlmostEqual(row["vulnerability_weighted_sim"], simulated)
+        self.assertAlmostEqual(row["food_risk_weighted_sim"], simulated * 0.4)
+        for column in ("vulnerability_weighted", "food_risk_weighted",
+                       "vulnerability_weighted_sim", "food_risk_weighted_sim"):
             self.assertNotAlmostEqual(row[column], self.SCORES[column].mean(),
                                       msg=column)
 
