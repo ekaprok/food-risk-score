@@ -124,6 +124,9 @@ The following parameters can be configured:
   `suppliers`). `None` raises an error, `FILL_ZERO` reads it as zero, and
   `CARRY_FORWARD` repeats the previous year. A year with no supplier rows in
   the trade matrix therefore scores an external risk of 0.
+- `FALLBACK_WHEAT_CRITICALITY`: stand-in `criticality` values for countries the
+  calories dataset does not cover, as country name -> the crop's share of the
+  national calorie supply.
 
 ## The web page
 
