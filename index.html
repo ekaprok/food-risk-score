@@ -96,6 +96,17 @@
   <p>Scores cover 2020&ndash;2024. Every figure below is per country, per crop,
   per year.</p>
 
+  <h3>Handling missing data</h3>
+  <p>When years are missing from the source files, the National Trade and Bilateral Trade Matrix datasets default to zero. The Food Balances dataset carries the previous year's data forward.</p>
+
+  <p>The Food Balances dataset has no data for three of the countries scored here.
+  We assign each a fixed <code>Criticality</code> proxy, borrowed from a comparable country:</p>
+  <ul>
+    <li>Somalia — <strong>0.32</strong>, from Djibouti in 2023</li>
+    <li>Sudan — <strong>0.32</strong>, from Djibouti in 2023</li>
+    <li>Singapore — <strong>0.11</strong>, from South Korea in 2023</li>
+  </ul>
+
   <h3>The risk score</h3>
   <ol class="steps">
     <li>
@@ -168,18 +179,6 @@
       score on the left.</p>
     </li>
   </ol>
-
-  <h3>Missing data</h3>
-  <p>When years are missing from the source files, the National Trade and Bilateral Trade Matrix datasets default to zero. The Food Balances dataset carries the previous year's data forward.</p>
-
-  <b>Countries missing calorie data</b>
-  <p>The Food Balances dataset has no data for three of the countries scored here.
-  We assign each a fixed <code>Criticality</code> proxy, borrowed from a comparable country:</p>
-  <ul>
-    <li>Somalia — <strong>0.32</strong>, from Djibouti in 2023</li>
-    <li>Sudan — <strong>0.32</strong>, from Djibouti in 2023</li>
-    <li>Singapore — <strong>0.11</strong>, from South Korea in 2023</li>
-  </ul>
 </section>
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
