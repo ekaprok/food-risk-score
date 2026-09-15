@@ -51,8 +51,10 @@ body {
   background: var(--page);
   color: var(--text-primary);
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: 20px;
-  line-height: 1.5;
+  /* Prose sits a step below the headings and the numbers, at the same size as
+     the legend and the formulas, so the running text is the quietest thing. */
+  font-size: 17px;
+  line-height: 1.6;
 }
 
 /* ---------------------------------------------------------------- top bar */
@@ -232,6 +234,39 @@ figcaption {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
+}
+
+/* --------------------------------------------------------- the risk bands */
+
+/* Its own panel under the two columns, so the colour can be looked up right
+   where the cards it explains are. The prose is capped like the methodology's
+   for the same reason: a line the full width of the window is hard to track. */
+.bands-panel {
+  margin-top: 24px;
+}
+
+.bands-panel p,
+.bands-panel li {
+  max-width: 78ch;
+}
+
+/* Each row is set out the way a card is: the icon in the band colour, then the
+   name of the band, so the two read the same. */
+.bands {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.bands li {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.bands .band-icon {
+  flex: none;
+  line-height: 1.6;
 }
 
 /* --------------------------------------------------------- how it is worked out */

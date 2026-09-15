@@ -72,6 +72,30 @@
 
 </main>
 
+<!-- The three risk bands the two score cards are washed in, sitting directly
+     under them so the colour can be looked up where it is seen. -->
+<section class="panel bands-panel">
+  <h2>Reading the colours</h2>
+  <ul class="bands">
+    <li>
+      <span class="band-icon" style="--band: var(--band-low)">&#10003;</span>
+      <span><strong>Green &mdash; low risk</strong>, a score of 0.10 or below.
+      The harvest is steady, imports are spread across several suppliers, or the
+      commodity is a minor part of the diet.</span>
+    </li>
+    <li>
+      <span class="band-icon" style="--band: var(--band-moderate)">&#9679;</span>
+      <span><strong>Yellow &mdash; moderate risk</strong>, above 0.10 and up to
+      0.20. Either the harvest swings year to year or the imports lean on a few
+      suppliers, and the commodity matters enough to the diet that it shows.</span>
+    </li>
+    <li>
+      <span class="band-icon" style="--band: var(--band-high)">&#9650;</span>
+      <span><strong>Red &mdash; high risk</strong>, above 0.20. Unsteady domestic supply or highly concentrated imports affect a commodity the population heavily relies on, meaning any disruption will be directly felt on the plate.</span>
+    </li>
+  </ul>
+</section>
+
 <!-- Static methodology: every formula the CSV is built from, in the order
      food_score.py applies them. Nothing here depends on the loaded data. -->
 <section class="panel method">
@@ -83,10 +107,10 @@
   <ul>
     <li><a href="https://www.fao.org/faostat/en/#data/QCL"><strong>Production</strong></a>:
       Tracks domestic harvest quantities (<code>P</code>).</li>
-    <li><a href="https://www.fao.org/faostat/en/#data/TCL"><strong>National Trade</strong></a>:
+    <li><a href="https://www.fao.org/faostat/en/#data/TCL"><strong>Trade</strong></a>:
       Tracks total national imports (<code>I</code>) and exports
       (<code>E</code>).</li>
-    <li><a href="https://www.fao.org/faostat/en/#data/TM"><strong>Bilateral Trade Matrix</strong></a>:
+    <li><a href="https://www.fao.org/faostat/en/#data/TM"><strong>Detailed Trade Matrix</strong></a>:
       Tracks shipment volumes between specific trading partners, used to
       measure supplier concentration.</li>
     <li><a href="https://www.fao.org/faostat/en/#data/FBS"><strong>Food Balances</strong></a>:
@@ -97,7 +121,7 @@
   per year.</p>
 
   <h3>Handling missing data</h3>
-  <p>When years are missing from the source files, the National Trade and Bilateral Trade Matrix datasets default to zero. The Food Balances dataset carries the previous year's data forward.</p>
+  <p>When years are missing from the source files, the Trade and Detailed Trade Matrix datasets default to zero. The Food Balances dataset carries the previous year's data forward.</p>
 
   <p>The Food Balances dataset has no data for three of the countries scored here.
   We assign each a fixed <code>Criticality</code> proxy, borrowed from a comparable country:</p>
